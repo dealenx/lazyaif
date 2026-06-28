@@ -37,6 +37,44 @@ bun link lazyaif
 lazyaif tui
 ```
 
+## Usage
+
+### From source (GitHub)
+
+```bash
+git clone https://github.com/dealenx/lazyaif.git
+cd lazyaif/packages/lazyaif
+bun install
+bun run tui
+```
+
+### As a linked package (in another project)
+
+```bash
+cd packages/lazyaif
+bun link
+
+# in another project
+bun link lazyaif
+lazyaif tui
+```
+
+### Commands
+
+```bash
+lazyaif tui      # interactive TUI dashboard
+lazyaif plans    # list ai-factory plans
+lazyaif status   # brief status report
+```
+
+### Build standalone binary
+
+```bash
+cd packages/lazyaif
+bun run build
+./lazyaif tui
+```
+
 ## Structure
 
 ```
