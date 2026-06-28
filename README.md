@@ -1,5 +1,7 @@
 # lazyaif
 
+[![npm version](https://img.shields.io/npm/v/lazyaif.svg)](https://www.npmjs.com/package/lazyaif)
+
 Tools for analyzing ai-factory project artifacts.
 
 ## Quick start
