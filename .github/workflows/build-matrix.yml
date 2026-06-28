@@ -32,11 +32,6 @@ jobs:
             os: windows
             arch: arm64
             ext: .exe
-          - label: darwin-x64
-            runner: macos-13
-            os: darwin
-            arch: x64
-            ext: ""
           - label: darwin-arm64
             runner: macos-14
             os: darwin
