@@ -115,7 +115,7 @@ export function renderTaskDetail(
   status: PlanStatus,
   id: string,
 ): ScrollBoxRenderable {
-  console.debug(`[tui:task-detail] rendering plan=${plan.fileName} tasks=${plan.tasks.length} id=${id}`);
+  console.debug(`[tui:task-detail] sync phase: plan=${plan.fileName} tasks=${plan.tasks.length} id=${id}`);
 
   const scroll = new ScrollBoxRenderable(renderer, {
     id,
@@ -161,21 +161,47 @@ export function renderTaskDetail(
   });
   scroll.add(sepText);
 
-  const bodyMarkdown = extractPlanBody(plan.rawMarkdown);
-  const md = new MarkdownRenderable(renderer, {
-    id: `${id}-md`,
-    content: bodyMarkdown,
-    syntaxStyle: markdownSyntaxStyle,
-    fg: colors.fg,
-    bg: colors.bg,
-    conceal: false,
-    internalBlockMode: "top-level",
-    tableOptions: { style: "grid", widthMode: "content", cellPaddingX: 1 },
-    width: "100%",
-  });
-  scroll.add(md);
-
+  debug(`[tui:detail] sync phase done for ${plan.fileName}, scheduling markdown parse`);
   return scroll;
+}
+
+function appendMarkdownDeferred(
+  renderer: CliRenderer,
+  scroll: ScrollBoxRenderable,
+  plan: Plan,
+  id: string,
+  isStale: () => boolean,
+): ReturnType<typeof setTimeout> {
+  return setTimeout(() => {
+    if (isStale()) {
+      debug(`[tui:detail] skipping stale markdown for ${id} (current detail changed)`);
+      return;
+    }
+    debug(`[tui:detail] deferred markdown ready for ${id} plan=${plan.fileName}`);
+    try {
+      const bodyMarkdown = extractPlanBody(plan.rawMarkdown);
+      const md = new MarkdownRenderable(renderer, {
+        id: `${id}-md`,
+        content: bodyMarkdown,
+        syntaxStyle: markdownSyntaxStyle,
+        fg: colors.fg,
+        bg: colors.bg,
+        conceal: false,
+        internalBlockMode: "top-level",
+        tableOptions: { style: "grid", widthMode: "content", cellPaddingX: 1 },
+        width: "100%",
+      });
+      if (isStale()) {
+        debug(`[tui:detail] skipping stale markdown after create for ${id}`);
+        try { md.destroy(); } catch { /* noop */ }
+        return;
+      }
+      scroll.add(md);
+      renderer.requestRender();
+    } catch (e) {
+      console.warn(`[tui:detail] deferred markdown error for ${id}: ${e}`);
+    }
+  }, 0);
 }
 
 export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string): Promise<{ destroy: () => void }> {
@@ -226,6 +252,7 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
   });
 
   let currentDetail: { id: string; renderable: ScrollBoxRenderable } | null = null;
+  let pendingMarkdownTimer: ReturnType<typeof setTimeout> | null = null;
 
   const updateDetail = () => {
     console.debug(`[tui:app] updateDetail index=${selectedIndex} plan=${plans[selectedIndex]?.fileName ?? "<none>"}`);
@@ -233,6 +260,11 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
     if (!plan) {
       console.warn(`[tui:app] no plan at index=${selectedIndex}, keeping current detail`);
       return;
+    }
+    if (pendingMarkdownTimer) {
+      debug(`[tui:detail] cancelling pending markdown timer from previous render`);
+      clearTimeout(pendingMarkdownTimer);
+      pendingMarkdownTimer = null;
     }
     if (currentDetail) {
       console.debug(`[tui:app] removing previous detail id=${currentDetail.id}`);
@@ -244,7 +276,18 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
     bodyRow.add(detail);
     currentDetail = { id: detailId, renderable: detail };
     console.debug(`[tui:app] mounted new detail id=${detailId} plan=${plan.fileName}`);
+
+    pendingMarkdownTimer = appendMarkdownDeferred(
+      renderer,
+      detail,
+      plan,
+      `${detailId}-md`,
+      () => currentDetail?.id !== detailId,
+    );
   };
+
+  let pendingSelectTimer: ReturnType<typeof setTimeout> | null = null;
+  const DEBOUNCE_MS = 100;
 
   let select: SelectRenderable;
   const planList = renderPlanList(renderer, plans, statuses, (index: number) => {
@@ -255,7 +298,15 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
       return;
     }
     selectedIndex = clamped;
-    updateDetail();
+    if (pendingSelectTimer) {
+      debug(`[tui:debounce] cancelled previous pending render`);
+      clearTimeout(pendingSelectTimer);
+    }
+    debug(`[tui:debounce] scheduled render for index=${clamped} in ${DEBOUNCE_MS}ms`);
+    pendingSelectTimer = setTimeout(() => {
+      pendingSelectTimer = null;
+      updateDetail();
+    }, DEBOUNCE_MS);
   });
   select = planList;
 
@@ -312,6 +363,11 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
         } catch { /* ignore */ }
       }
 
+      const fastExists = await pathExists(fastPath);
+      const hasFastPlan = plans.some((p) => p.kind === "fast");
+      debug(`[tui:refresh] fast plan check: fastExists=${fastExists} hasFastPlan=${hasFastPlan}`);
+      if (fastExists !== hasFastPlan) changedCount++;
+
       if (changedCount === 0) return;
 
       debug(`[tui:refresh] data tick: ${changedCount} files changed`);
@@ -364,11 +420,19 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
   refreshState.labelInterval = setInterval(labelTick, LABEL_REFRESH_MS);
 
   const destroy = () => {
-    debug("[tui:shutdown] clearing refresh intervals");
+    debug("[tui:shutdown] clearing refresh intervals + pending timers");
     if (refreshState.dataInterval) clearInterval(refreshState.dataInterval);
     if (refreshState.labelInterval) clearInterval(refreshState.labelInterval);
     refreshState.dataInterval = null;
     refreshState.labelInterval = null;
+    if (pendingSelectTimer) {
+      clearTimeout(pendingSelectTimer);
+      pendingSelectTimer = null;
+    }
+    if (pendingMarkdownTimer) {
+      clearTimeout(pendingMarkdownTimer);
+      pendingMarkdownTimer = null;
+    }
   };
 
   return { destroy };

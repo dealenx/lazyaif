@@ -1,27 +1,33 @@
-# Research: TUI plans-viewer list switching не работает
+# Research
 
-Updated: 2026-06-28 18:46
+Updated: 2026-06-29 03:20
 Status: active
 
 ## Active Summary (input for /aif-plan)
-Topic: TUI plans-viewer — правая детальная панель не обновляется при переключении плана в левом списке
-Goal: Понять корневую причину; подготовить план фикса
+<!-- aif:active-summary:start -->
+Topic: TUI detail pane подвисает при переключении планов — рендеринг MarkdownRenderable блокирует event loop
+Goal: Сделать переключение планов отзывчивым — стрелки не залипают, markdown рендерится асинхронно
 Constraints:
-  - opentui `Box()`/`ScrollBox()`/`Select()` возвращают **VNode Proxy**, не реальный Renderable
-  - Реальный Renderable создаётся только при `parent.add(vnode)` через `instantiate()`
-  - Первый detail для плана #0 отображается корректно при старте, но **никогда не заменяется**
+  - `new MarkdownRenderable(renderer, { content })` парсит markdown (marked) + строит renderable-дерево синхронно в constructor'е
+  - Файлы планов: 1.7KB–27KB; `aif-plans-viewer.md` = 27KB парсится ощутимо
+  - `updateDetail()` вызывается синхронно из `onSelect` → блокирует event loop → TUI не реагирует на следующие нажатия пока markdown не отрендерится
+  - opentui `MarkdownRenderable` привязан к `RenderContext` (renderer) — нельзя создать без renderer
 Decisions:
-  - Скриншоты однозначно показывают: подсветка в Select двигается стрелками, но `updateDetail` не вызывается → `bodyRow.remove(currentDetail.id)` либо падает (try/catch глотает), либо не находит ребёнка по переданному id
-  - Root cause: `currentDetail` хранит VNode Proxy, у которого `.id` через Proxy-геттер возвращает **функцию** (или undefined), а не строку. `bodyRow.remove(<function>)` молча не находит ребёнка, удаления не происходит, второй detail добавляется поверх — перекрытие двух `ScrollBox` шириной 60%
+  - Подход A (deferred parse): рендерить title/meta/status мгновенно, markdown через `setTimeout(0)` — освобождает event loop
+  - Подход E (debounce): 100ms debounce на `onSelect` — при удержании стрелки рендерить только последний index
+  - Комбо A+E — минимальный объём изменений, максимальный эффект
+  - B (pre-warm cache) отвергнут: привязка к RenderContext, CPU spike на старте, сложность lifecycle
+  - C (update in-place) отвергнут: `set content()` всё равно reparse, выигрыш минимален при полной смене контента
+  - D (truncate) отвергнут: теряет контент, плохой UX
 Open questions:
-  - Почему `select.on(SELECTION_CHANGED, ...)` через VNode-прокси вообще срабатывает, если `instantiate` применяет `__pendingCalls` к `delegatedInstance` (Proxy вокруг instance)? Возможно `delegateMap` не задан для Select → `delegatedInstance === instance` → `instance.on(...)` действительно работает
-  - Тот же вопрос для `select.focus()`: метод накапливается в `__pendingCalls` и применяется к instance при `add()` — фокус должен сработать. Если стрелки подсвечивают список — значит focus работает
-  - Возможно `select.on()` через прокси действительно подписывается, но `SELECTION_CHANGED` event аргументы передаются по-другому? Или `console.debug` логи в TUI просто не пишутся в stderr (terminal control sequences перехватывают)? Нужна проверка
+  - `queueMicrotask` vs `setTimeout(0)`: microtask выполнится в том же event loop iteration (после I/O), `setTimeout(0)` — в следующем. Для TUI responsiveness `setTimeout(0)` безопаснее
+  - Показывать placeholder "Loading markdown…" или просто title/meta/status без markdown пока парсится? Второе чище — не моргает
 Success signals:
-  - При нажатии стрелок в TUI правая панель обновляется: показывает title/branch/created выбранного плана
-  - Enter тоже работает (для UX-ожидания)
-  - При quit (`q`/`escape`) нет warning'ов в логах
-Next step: Применить `/aif-fix` с двумя правками: (1) задать явный `id` каждому detail, (2) получать реальный Renderable через `bodyRow.getRenderable(id)` после `add()`, использовать его `id` (или саму ссылку) для удаления
+  - При быстром переборе стрелок (удерж ↓) TUI не залипает — подсветка в Select двигается плавно
+  - После остановки на плане markdown появляется через ~1 кадр
+  - При одиночном нажатии стрелки markdown виден почти мгновенно (title/meta/status — мгновенно)
+Next step: `/aif-plan fast` — deferred markdown parse + debounce onSelect
+<!-- aif:active-summary:end -->
 
 ## Mouse support в TUI планов
 
@@ -235,3 +241,20 @@ Links (paths):
   - node_modules/@opentui/core/index-6xr3rbbe.js:3072 — `function Box(props, ...children)` → VNode
   - node_modules/@opentui/core/index-6xr3rbbe.js:1607 — `instantiate()` создаёт реальный instance
   - node_modules/@opentui/core/index-6xr3rbbe.js:1013 — instance регистрируется в `renderableMapById`
+
+### 2026-06-29 03:20 — Markdown render blocks event loop on plan switch
+What changed:
+  - TUI auto-refresh (v0.2.0) добавлен и работает, но при переключении между планами detail pane подвисает
+  - Корень: `new MarkdownRenderable(renderer, { content: 27KB markdown })` парсит markdown синхронно в constructor'е (marked.parse + buildRenderableTokens + createTopLevelRenderable × N)
+  - `updateDetail()` вызывается синхронно из `onSelect` → event loop заблокирован → TUI не обрабатывает следующие нажатия
+  - Файлы: aif-plans-viewer.md=27KB, feature-ci-release-installers.md=17KB, restructure-module-architecture.md=17KB
+Key notes:
+  - Решение A (deferred parse): title/meta/status/separator рендерятся мгновенно (TextRenderable, дёшево), markdown через `setTimeout(0)` → освобождает event loop
+  - Решение E (debounce): 100ms на onSelect → при удержании стрелки рендерить только последний index, не промежуточные
+  - `MarkdownRenderable` имеет `streaming?: boolean` — но для LLM streaming, не наш случай
+  - `internalBlockMode: "coalesced"` вместо `"top-level"` — объединяет блоки, меньше overhead, но мы используем top-level намеренно
+  - Pre-warm cache (B) отвергнут: `MarkdownRenderable` привязан к RenderContext, нельзя создать без renderer; CPU spike на старте; сложность lifecycle при удалении планов
+Links (paths):
+  - packages/lazyaif/src/views/plans-viewer/tui-view.ts:112-179 — `renderTaskDetail` (MarkdownRenderable creation)
+  - packages/lazyaif/src/views/plans-viewer/tui-view.ts:230-247 — `updateDetail` (synchronous, bottleneck)
+  - packages/lazyaif/node_modules/@opentui/core/renderables/Markdown.d.ts:134-255 — MarkdownRenderable API
