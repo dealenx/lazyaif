@@ -37,7 +37,9 @@ jobs:
             aarch64|arm64) arch_norm="arm64" ;;
           esac
           os_norm=$(uname -s | tr '[:upper:]' '[:lower:]')
-          bun build --compile bin/lazyaif.ts --outfile "$GITHUB_WORKSPACE/out/lazyaif-smoke-$os_norm-$arch_norm"
+          bun build --compile bin/lazyaif.ts \
+            --define "process.env.LAZYAIF_VERSION=\"smoke\"" \
+            --outfile "$GITHUB_WORKSPACE/out/lazyaif-smoke-$os_norm-$arch_norm"
           ls -la "$GITHUB_WORKSPACE/out/"
 
       - name: smoke - verify binary launches
@@ -72,7 +74,9 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path "$env:GITHUB_WORKSPACE/out" | Out-Null
           bun install --frozen-lockfile
-          bun build --compile bin/lazyaif.ts --outfile "$env:GITHUB_WORKSPACE/out/lazyaif-smoke-windows-x64.exe"
+          bun build --compile bin/lazyaif.ts `
+            --define "process.env.LAZYAIF_VERSION=`"smoke`"" `
+            --outfile "$env:GITHUB_WORKSPACE/out/lazyaif-smoke-windows-x64.exe"
           Get-ChildItem "$env:GITHUB_WORKSPACE/out/"
         shell: pwsh
 

@@ -79,7 +79,9 @@ jobs:
         run: |
           echo "[ci:build:${{ matrix.label }}] starting compile (version=${{ steps.version.outputs.version }})"
           mkdir -p ../../out
-          bun build --compile bin/lazyaif.ts --outfile "../../out/lazyaif-${{ steps.version.outputs.version }}-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}"
+          bun build --compile bin/lazyaif.ts \
+            --define "process.env.LAZYAIF_VERSION=\"${{ steps.version.outputs.version }}\"" \
+            --outfile "../../out/lazyaif-${{ steps.version.outputs.version }}-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}"
           echo "[ci:build:${{ matrix.label }}] finished compile"
         shell: bash
 
