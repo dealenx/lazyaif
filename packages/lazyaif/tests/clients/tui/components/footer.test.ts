@@ -4,7 +4,7 @@ import type { CliRenderer } from "@opentui/core";
 import { renderFooter } from "../../../../src/clients/tui/components/footer.js";
 import { VERSION } from "../../../../src/shared/version.js";
 
-const HOTKEYS = "Arrows/Enter: select · Mouse click: select · q: quit";
+const HOTKEYS = "Arrows/Enter: select · Mouse click: select · auto-refresh: 2s · q: quit";
 
 type Chunk = { text?: string };
 type StyledLike = { chunks?: Chunk[] };

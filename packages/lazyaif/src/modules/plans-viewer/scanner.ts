@@ -1,4 +1,4 @@
-import { readFile, readdir, access } from "node:fs/promises";
+import { readFile, readdir, access, stat } from "node:fs/promises";
 import { join, sep } from "node:path";
 import { parsePlanFile } from "./parser.js";
 import type { Plan } from "./types.js";
@@ -30,7 +30,9 @@ export async function scanAiFactory(rootDir: string): Promise<Plan[]> {
     try {
       const content = await readFile(fastPath, "utf-8");
       const relPath = ["", ".ai-factory", "PLAN.md"].join(sep);
-      plans.push(parsePlanFile(content, relPath));
+      const mtime = await readMtimeMs(fastPath);
+      debug(`[scanner] mtime=${relPath}=${mtime}`);
+      plans.push({ ...parsePlanFile(content, relPath), mtime });
     } catch (e) { warn(`[scanner] failed to read PLAN.md: ${e}`); }
   }
 
@@ -38,13 +40,16 @@ export async function scanAiFactory(rootDir: string): Promise<Plan[]> {
   if (await pathExists(plansDir)) {
     try {
       const entries = await readdir(plansDir);
-      const mdFiles = entries.filter((f) => f.endsWith(".md")).sort();
+      const mdFiles = entries.filter((f) => f.endsWith(".md"));
+      debug(`[scanner] sort removed, caller sorts; files=${mdFiles.length}`);
       for (const f of mdFiles) {
         try {
           const fullPath = join(plansDir, f);
           const content = await readFile(fullPath, "utf-8");
           const relPath = ["", ".ai-factory", "plans", f].join(sep);
-          plans.push(parsePlanFile(content, relPath));
+          const mtime = await readMtimeMs(fullPath);
+          debug(`[scanner] mtime=${relPath}=${mtime}`);
+          plans.push({ ...parsePlanFile(content, relPath), mtime });
         } catch (e) { warn(`[scanner] failed to read ${f}: ${e}`); }
       }
     } catch (e) { warn(`[scanner] failed to read plans dir: ${e}`); }
@@ -54,4 +59,14 @@ export async function scanAiFactory(rootDir: string): Promise<Plan[]> {
   const fullCount = plans.filter((p) => p.kind === "full").length;
   debug(`[scanner] found plans: fast=${fastCount} full=${fullCount}`);
   return plans;
+}
+
+async function readMtimeMs(p: string): Promise<number> {
+  try {
+    const s = await stat(p);
+    return s.mtimeMs;
+  } catch (e) {
+    warn(`[scanner] stat failed for ${p}: ${e}`);
+    return 0;
+  }
 }

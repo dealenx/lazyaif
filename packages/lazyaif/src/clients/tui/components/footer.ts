@@ -30,7 +30,7 @@ export function renderFooter(renderer: CliRenderer): BoxRenderable {
 
   const hotkeysText = new TextRenderable(renderer, {
     id: "tui-footer-text",
-    content: "Arrows/Enter: select · Mouse click: select · q: quit",
+    content: "Arrows/Enter: select · Mouse click: select · auto-refresh: 2s · q: quit",
     fg: colors.muted,
   });
 

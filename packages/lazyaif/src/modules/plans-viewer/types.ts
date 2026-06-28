@@ -40,6 +40,8 @@ export interface Plan {
   tasks: Task[];
   /** Исходный markdown файла плана (для рендера в TUI). */
   rawMarkdown: string;
+  /** Время последней модификации файла на диске (ms epoch, из fs.stat().mtimeMs). */
+  mtime: number;
 }
 
 /** Статус выполнения плана. */

@@ -42,7 +42,7 @@ function isHeading(line: string): boolean {
   return /^#{1,6}\s/.test(line);
 }
 
-export function parsePlanFile(content: string, relativePath: string): Plan {
+export function parsePlanFile(content: string, relativePath: string): Omit<Plan, "mtime"> {
   const kind = relativePath.endsWith("PLAN.md") ? "fast" : "full";
   const fileName = relativePath.split(/[/\\]/).pop() ?? relativePath;
   debug(`[parser] parsing file=${relativePath} kind=${kind}`);

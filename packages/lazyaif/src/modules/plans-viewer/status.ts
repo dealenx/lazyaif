@@ -1,6 +1,8 @@
 import type { Plan, PlanStatus, PlanState } from "./types.js";
 
-export function computeStatus(plan: Plan): PlanStatus {
+type PlanLike = Pick<Plan, "tasks">;
+
+export function computeStatus(plan: PlanLike): PlanStatus {
   const total = plan.tasks.length;
   const done = plan.tasks.filter((t) => t.done).length;
   const pct = total > 0 ? Math.round((done / total) * 100) : 0;
