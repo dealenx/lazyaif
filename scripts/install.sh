@@ -71,21 +71,21 @@ checksums_name="checksums.txt"
 
 # --- 5. Parse asset download URLs -------------------------------------------
 # Extract browser_download_url for a given asset name from the GitHub API JSON.
-# The JSON has nested objects (uploader, etc.) so [^}]* breaks. We use awk to
-# find the asset name, then scan forward for the next browser_download_url.
+# Uses POSIX awk (no gawk-specific match() with capture array). Splits on
+# commas into lines, then scans for the asset name, then grabs the next
+# browser_download_url value after it.
 extract_url() {
   _asset="$1"
-  echo "$api_resp" | awk -v want="$_asset" '
-    {
-      gsub(/,/, "\n")
-    }
+  echo "$api_resp" | tr ',' '\n' | awk -v want="$_asset" '
     /"name"[[:space:]]*:[[:space:]]*"/ {
-      match($0, /"name"[[:space:]]*:[[:space:]]*"([^"]*)"/, a)
-      if (a[1] == want) found = 1
+      sub(/.*"name"[[:space:]]*:[[:space:]]*"/, "")
+      sub(/".*/, "")
+      if ($0 == want) found = 1
     }
     found && /"browser_download_url"[[:space:]]*:[[:space:]]*"/ {
-      match($0, /"browser_download_url"[[:space:]]*:[[:space:]]*"([^"]*)"/, b)
-      print b[1]
+      sub(/.*"browser_download_url"[[:space:]]*:[[:space:]]*"/, "")
+      sub(/".*/, "")
+      print
       exit
     }
   ' | head -n1
