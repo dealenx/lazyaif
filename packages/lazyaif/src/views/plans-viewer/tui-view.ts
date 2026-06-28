@@ -1,6 +1,6 @@
 import type { CliRenderer } from "@opentui/core";
 import { Box, ScrollBox, Select, SelectRenderableEvents, Text, t, bold, fg } from "@opentui/core";
-import { scanAiFactory, computeStatus, statusIcon, formatTaskProgress, formatPercent } from "../../modules/plans-viewer/index.js";
+import { scanAiFactory, computeStatus, statusIcon, formatTaskProgress, formatPercent, clampSelection } from "../../modules/plans-viewer/index.js";
 import type { Plan, PlanStatus } from "../../modules/plans-viewer/types.js";
 import { colors } from "../../clients/tui/components/index.js";
 import { renderHeader, renderFooter } from "../../clients/tui/components/index.js";
@@ -40,6 +40,11 @@ export function renderPlanList(
 
   select.on(SelectRenderableEvents.SELECTION_CHANGED, (index: number) => {
     console.debug(`[tui:plan-list] selection changed index=${index}`);
+    onSelect(index);
+  });
+
+  select.on(SelectRenderableEvents.ITEM_SELECTED, (index: number) => {
+    console.debug(`[tui:plan-list] item selected (enter) index=${index}`);
     onSelect(index);
   });
 
@@ -126,23 +131,35 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string) 
   let currentDetail: ReturnType<typeof renderTaskDetail> | null = null;
 
   const updateDetail = () => {
-    console.debug(`[tui:app] selection changed index=${selectedIndex}`);
+    console.debug(`[tui:app] updateDetail index=${selectedIndex} plan=${plans[selectedIndex]?.fileName ?? "<none>"}`);
     const plan = plans[selectedIndex];
-    if (!plan) return;
+    if (!plan) {
+      console.warn(`[tui:app] no plan at index=${selectedIndex}, keeping current detail`);
+      return;
+    }
     if (currentDetail) {
+      console.debug(`[tui:app] removing previous detail id=${currentDetail.id}`);
+      try { (bodyRow as unknown as { remove: (id: string) => void }).remove(currentDetail.id); } catch (e) { console.warn(`[tui:app] bodyRow.remove failed`, e); }
       try { (currentDetail as unknown as { dispose?: () => void }).dispose?.(); } catch { /* noop */ }
     }
     currentDetail = renderTaskDetail(plan, statuses[selectedIndex]);
     bodyRow.add(currentDetail);
+    console.debug(`[tui:app] mounted new detail id=${currentDetail.id} plan=${plan.fileName}`);
   };
 
   const planList = renderPlanList(plans, statuses, (index: number) => {
-    selectedIndex = index;
+    console.debug(`[tui:app] onSelect index=${index}`);
+    const clamped = clampSelection(index, plans.length);
+    if (clamped === null) {
+      console.warn(`[tui:app] selection index out of bounds: ${index}`);
+      return;
+    }
+    selectedIndex = clamped;
     updateDetail();
   });
 
   bodyRow.add(planList);
-  bodyRow.add(renderTaskDetail(plans[selectedIndex], statuses[selectedIndex]));
+  updateDetail();
 
   renderer.root.add(
     Box(

@@ -1,11 +1,17 @@
 import { Command } from "commander";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const pkg = JSON.parse(readFileSync(join(__dirname, "..", "package.json"), "utf-8"));
 
 const program = new Command();
 
 program
   .name("lazyaif")
   .description("Analyze ai-factory plan statuses")
-  .version("0.1.0")
+  .version(pkg.version)
   .option("-p, --path <dir>", "Project root to scan", process.cwd())
   .action(async (options: { path: string }) => {
     console.debug(`[bin] mode=tui (default) args=${JSON.stringify(options)}`);

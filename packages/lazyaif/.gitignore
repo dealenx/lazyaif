@@ -1,1 +1,5 @@
 node_modules
+
+# build artifacts (bun build --compile)
+lazyaif
+lazyaif.exe
