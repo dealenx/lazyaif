@@ -22,6 +22,34 @@ lazyaif status   # brief status report
 
 Requirements: **Bun >= 1.3** or **Node >= 26.3** (with `NODE_OPTIONS=--experimental-ffi`) for TUI; **Node >= 20** for CLI commands.
 
+## Installation
+
+Prebuilt binaries are published to [GitHub Releases](https://github.com/dealenx/lazyaif/releases) for Windows, macOS, and Linux (x64 + arm64).
+
+### Unix (macOS / Linux)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/dealenx/lazyaif/main/scripts/install.sh | sh
+```
+
+Installs to `~/.local/bin/lazyaif` (override with `LAZYAIF_INSTALL_DIR=/path`).
+
+### Windows (PowerShell)
+
+```powershell
+irm https://raw.githubusercontent.com/dealenx/lazyaif/main/scripts/install.ps1 | iex
+```
+
+Installs to `%LOCALAPPDATA%\lazyaif\lazyaif.exe` (override with `$env:LAZYAIF_INSTALL_DIR = "C:\path"`).
+
+### npm
+
+```bash
+bunx lazyaif
+# or
+npx lazyaif
+```
+
 ## Development
 
 ```bash
