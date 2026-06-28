@@ -1,0 +1,9 @@
+# build artifacts (CI/local compile output)
+out/
+
+# AI factory working artifacts (keep plans/, ignore transient)
+.ai-factory/patches/
+
+# OS junk
+.DS_Store
+Thumbs.db

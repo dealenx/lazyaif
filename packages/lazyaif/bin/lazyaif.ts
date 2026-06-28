@@ -1,18 +1,37 @@
 #!/usr/bin/env bun
 import { Command } from "commander";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const pkg = JSON.parse(readFileSync(join(__dirname, "..", "package.json"), "utf-8"));
+
+function resolveVersion(): string {
+  if (process.env.LAZYAIF_VERSION) return process.env.LAZYAIF_VERSION;
+  const candidates = [
+    join(__dirname, "package.json"),
+    join(__dirname, "..", "package.json"),
+    join(__dirname, "..", "..", "package.json"),
+  ];
+  for (const p of candidates) {
+    if (existsSync(p)) {
+      try {
+        const pkg = JSON.parse(readFileSync(p, "utf-8")) as { version?: string };
+        if (pkg.version) return pkg.version;
+      } catch {
+        continue;
+      }
+    }
+  }
+  return "0.0.0-unknown";
+}
 
 const program = new Command();
 
 program
   .name("lazyaif")
   .description("Analyze ai-factory plan statuses")
-  .version(pkg.version)
+  .version(resolveVersion())
   .option("-p, --path <dir>", "Project root to scan", process.cwd())
   .action(async (options: { path: string }) => {
     console.debug(`[bin] mode=tui (default) args=${JSON.stringify(options)}`);

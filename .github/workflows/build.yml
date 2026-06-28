@@ -1,0 +1,14 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: CI build matrix
+    uses: ./.github/workflows/build-matrix.yml

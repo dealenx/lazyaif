@@ -1,0 +1,134 @@
+name: Build matrix (reusable)
+
+on:
+  workflow_call:
+    outputs:
+      version:
+        value: ${{ jobs.build.outputs.version }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build (${{ matrix.label }})
+    runs-on: ${{ matrix.runner }}
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    defaults:
+      run:
+        working-directory: packages/lazyaif
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: windows-x64
+            runner: windows-latest
+            os: windows
+            arch: x64
+            ext: .exe
+          - label: windows-arm64
+            runner: windows-latest
+            os: windows
+            arch: arm64
+            ext: .exe
+          - label: darwin-x64
+            runner: macos-13
+            os: darwin
+            arch: x64
+            ext: ""
+          - label: darwin-arm64
+            runner: macos-14
+            os: darwin
+            arch: arm64
+            ext: ""
+          - label: linux-x64
+            runner: ubuntu-latest
+            os: linux
+            arch: x64
+            ext: ""
+          - label: linux-arm64
+            runner: ubuntu-latest
+            os: linux
+            arch: arm64
+            ext: ""
+
+    steps:
+      - name: [ci:build] checkout
+        uses: actions/checkout@v4
+
+      - name: [ci:build] setup bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3
+
+      - name: [ci:build] install deps
+        run: bun install --frozen-lockfile
+
+      - name: [ci:build] typecheck
+        run: bun run typecheck
+
+      - name: [ci:build] resolve version
+        id: version
+        shell: bash
+        run: |
+          if [ -n "${GITHUB_REF_NAME:-}" ] && [[ "${GITHUB_REF_NAME}" == v* ]]; then
+            echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=dev-$(echo "${GITHUB_SHA}" | cut -c1-7)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: [ci:build] compile binary
+        env:
+          LAZYAIF_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          echo "[ci:build:${{ matrix.label }}] starting compile (version=${{ steps.version.outputs.version }})"
+          mkdir -p ../../out
+          bun build --compile bin/lazyaif.ts --outfile "../../out/lazyaif-${{ steps.version.outputs.version }}-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}"
+          echo "[ci:build:${{ matrix.label }}] finished compile"
+        shell: bash
+
+      - name: [ci:build] verify binary (non-windows)
+        if: matrix.os != 'windows'
+        run: |
+          BIN="../../out/lazyaif-${{ steps.version.outputs.version }}-${{ matrix.os }}-${{ matrix.arch }}"
+          chmod +x "$BIN"
+          echo "[ci:build:${{ matrix.label }}] $(ls -la "$BIN")"
+          "$BIN" --version
+        shell: bash
+
+      - name: [ci:build] verify binary (windows)
+        if: matrix.os == 'windows'
+        run: |
+          $BIN = "../../out/lazyaif-${{ steps.version.outputs.version }}-${{ matrix.os }}-${{ matrix.arch }}.exe"
+          Write-Host "[ci:build:${{ matrix.label }}] $(Get-Item $BIN | Select-Object Length,FullName)"
+          & $BIN --version
+        shell: pwsh
+
+      - name: [ci:build] sha256 (unix)
+        if: matrix.os != 'windows'
+        working-directory: out
+        run: |
+          sha256sum "lazyaif-${{ steps.version.outputs.version }}-${{ matrix.os }}-${{ matrix.arch }}" > "lazyaif-${{ steps.version.outputs.version }}-${{ matrix.os }}-${{ matrix.arch }}.sha256"
+          echo "[ci:build:${{ matrix.label }}] checksum:"
+          cat "lazyaif-${{ steps.version.outputs.version }}-${{ matrix.os }}-${{ matrix.arch }}.sha256"
+        shell: bash
+
+      - name: [ci:build] sha256 (windows)
+        if: matrix.os == 'windows'
+        working-directory: out
+        run: |
+          $asset = "lazyaif-${{ steps.version.outputs.version }}-${{ matrix.os }}-${{ matrix.arch }}.exe"
+          $hash = (Get-FileHash -Algorithm SHA256 "$asset").Hash.ToLower()
+          "$hash  $asset" | Out-File -FilePath "${asset}.sha256" -Encoding ascii -NoNewline
+          Write-Host "[ci:build:${{ matrix.label }}] checksum:"
+          Get-Content "${asset}.sha256"
+        shell: pwsh
+
+      - name: [ci:build] upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.label }}
+          path: |
+            out/lazyaif-*
+          retention-days: 7
