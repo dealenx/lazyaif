@@ -70,30 +70,29 @@ asset_name="lazyaif-$tag_name-$os-$arch"
 checksums_name="checksums.txt"
 
 # --- 5. Parse asset download URLs -------------------------------------------
-# We grep for "name" and "browser_download_url" pairs.
-# The JSON has blocks: { "name": "...", ... "browser_download_url": "..." }
-# Strategy: split on '"name":' and for each block check if it matches our asset,
-# then extract the browser_download_url from that block.
+# Extract browser_download_url for a given asset name from the GitHub API JSON.
+# The JSON has nested objects (uploader, etc.) so [^}]* breaks. We use awk to
+# find the asset name, then scan forward for the next browser_download_url.
 extract_url() {
-  # $1 = asset name to find
-  # reads api_resp from stdin
   _asset="$1"
-  _found=""
-  # Use awk to iterate over the assets array entries
-  _found="$(echo "$api_resp" | awk -v want="$_asset" '
-    BEGIN { RS=",|{|}" }
-    /"name"[[:space:]]*:[[:space:]]*"\\"/ {
-      # not reliable enough; fall through to next
+  echo "$api_resp" | awk -v want="$_asset" '
+    {
+      gsub(/,/, "\n")
     }
-    { }
-  ' 2>/dev/null || true)"
-  # Fallback: simpler sed approach — find the name, then the next url after it
-  _found="$(echo "$api_resp" | grep -o '"name"[[:space:]]*:[[:space:]]*"[^"]*"[^}]*"browser_download_url"[[:space:]]*:[[:space:]]*"[^"]*"' | sed -n "s/.*\"name\"[[:space:]]*:[[:space:]]*\"$_asset\"[^}]*\"browser_download_url\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" | head -n1)"
-  echo "$_found"
+    /"name"[[:space:]]*:[[:space:]]*"/ {
+      match($0, /"name"[[:space:]]*:[[:space:]]*"([^"]*)"/, a)
+      if (a[1] == want) found = 1
+    }
+    found && /"browser_download_url"[[:space:]]*:[[:space:]]*"/ {
+      match($0, /"browser_download_url"[[:space:]]*:[[:space:]]*"([^"]*)"/, b)
+      print b[1]
+      exit
+    }
+  ' | head -n1
 }
 
 log "looking for asset: $asset_name"
-bin_url="$(echo "$api_resp" | sed -n "s/.*\"name\"[[:space:]]*:[[:space:]]*\"$asset_name\"[^}]*\"browser_download_url\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" | head -n1)"
+bin_url="$(extract_url "$asset_name")"
 
 if [ -z "$bin_url" ]; then
   err "asset not found in release: $asset_name"
@@ -104,7 +103,7 @@ fi
 log "binary url: $bin_url"
 
 log "looking for: $checksums_name"
-checksums_url="$(echo "$api_resp" | sed -n "s/.*\"name\"[[:space:]]*:[[:space:]]*\"$checksums_name\"[^}]*\"browser_download_url\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" | head -n1)"
+checksums_url="$(extract_url "$checksums_name")"
 
 if [ -z "$checksums_url" ]; then
   err "checksums.txt not found in release"
@@ -134,7 +133,7 @@ curl -fsSL -H "User-Agent: lazyaif-installer" -o "$tmp_checksums" "$checksums_ur
 }
 
 # --- 7. Verify SHA-256 -----------------------------------------------------
-expected_hash="$(grep -E "[[:space:]]+$asset_name\$" "$tmp_checksums" | awk '{print $1}' | head -n1)"
+expected_hash="$(grep -E "[[:space:]]+\.?/?$asset_name\$" "$tmp_checksums" | awk '{print $1}' | head -n1)"
 if [ -z "$expected_hash" ]; then
   err "no checksum found for $asset_name in checksums.txt"
   err "contents:"

@@ -117,9 +117,12 @@ try {
   $expectedHash = $null
   foreach ($line in ($checksumsContent -split "`n")) {
     $parts = $line -split '\s+', 2
-    if ($parts.Count -eq 2 -and $parts[1].Trim() -eq $assetName) {
-      $expectedHash = $parts[0].Trim().ToLower()
-      break
+    if ($parts.Count -eq 2) {
+      $name = $parts[1].Trim().TrimStart("./")
+      if ($name -eq $assetName) {
+        $expectedHash = $parts[0].Trim().ToLower()
+        break
+      }
     }
   }
   if (-not $expectedHash) {

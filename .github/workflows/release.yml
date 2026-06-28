@@ -42,12 +42,10 @@ jobs:
       - name: ci:release - generate checksums.txt
         run: |
           cd release
-          # Only binary assets (exclude .sha256 sidecars and checksums.txt itself)
           ls -la
-          binaries=$(find . -type f -name 'lazyaif-*' ! -name '*.sha256')
-          echo "[ci:release] binaries to hash:"
-          echo "$binaries"
-          echo "$binaries" | xargs sha256sum > checksums.txt
+          # Hash all binaries (exclude .sha256 sidecars). Strip ./ prefix so
+          # checksums.txt has bare filenames (installers match on exact name).
+          sha256sum lazyaif-* | grep -v '\.sha256$' > checksums.txt
           echo "[ci:release] checksums.txt:"
           cat checksums.txt
 
