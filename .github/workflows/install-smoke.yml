@@ -50,8 +50,8 @@ jobs:
           asset="lazyaif-smoke-$os-$arch_norm"
           mkdir -p mock-release
           cp "out/$asset" "mock-release/$asset"
-          # Generate checksums.txt
-          (cd mock-release && sha256sum "$asset" > checksums.txt)
+          # Generate checksums.txt (macOS lacks sha256sum, use shasum)
+          (cd mock-release && { command -v sha256sum >/dev/null 2>&1 && sha256sum "$asset" || shasum -a 256 "$asset"; } > checksums.txt)
           # Run the installer with a fake tag "smoke" by overriding the binary name to match.
           # The installer is designed for GitHub Releases; here we skip network and just
           # verify the binary launches directly (smoke = does the binary run).

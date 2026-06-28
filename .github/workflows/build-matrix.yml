@@ -109,9 +109,14 @@ jobs:
         if: matrix.os != 'windows'
         working-directory: out
         run: |
-          sha256sum "lazyaif-${{ steps.version.outputs.version }}-${{ matrix.os }}-${{ matrix.arch }}" > "lazyaif-${{ steps.version.outputs.version }}-${{ matrix.os }}-${{ matrix.arch }}.sha256"
+          asset="lazyaif-${{ steps.version.outputs.version }}-${{ matrix.os }}-${{ matrix.arch }}"
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "$asset" > "${asset}.sha256"
+          else
+            shasum -a 256 "$asset" > "${asset}.sha256"
+          fi
           echo "[ci:build:${{ matrix.label }}] checksum:"
-          cat "lazyaif-${{ steps.version.outputs.version }}-${{ matrix.os }}-${{ matrix.arch }}.sha256"
+          cat "${asset}.sha256"
         shell: bash
 
       - name: ci:build - sha256 (windows)
