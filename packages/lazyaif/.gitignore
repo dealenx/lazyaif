@@ -3,3 +3,6 @@ node_modules
 # build artifacts (bun build --compile)
 lazyaif
 lazyaif.exe
+
+# bundle output (prebuild -\u003e dist/lazyaif.js for npx/node)
+dist

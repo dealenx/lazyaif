@@ -59,12 +59,17 @@ bun link lazyaif
 lazyaif tui
 ```
 
+### Requirements
+
+- **Node.js >= 26.3** (with `--experimental-ffi`) or **Bun >= 1.3** — required for the TUI command
+- **Node.js >= 20** — sufficient for `plans` and `status` CLI commands
+
 ### Commands
 
 ```bash
-lazyaif tui      # interactive TUI dashboard
-lazyaif plans    # list ai-factory plans
-lazyaif status   # brief status report
+lazyaif tui      # interactive TUI dashboard (Node >=26.3 or Bun)
+lazyaif plans    # list ai-factory plans (Node >=20)
+lazyaif status   # brief status report (Node >=20)
 ```
 
 ### Build standalone binary
