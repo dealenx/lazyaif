@@ -2,6 +2,8 @@
 
 [![npm version](https://img.shields.io/npm/v/lazyaif.svg)](https://www.npmjs.com/package/lazyaif)
 
+![lazyaif](https://github.com/user-attachments/assets/f83eb55c-f55f-419e-b1d0-8b3517f9a34d)
+
 Tools for analyzing ai-factory project artifacts.
 
 ## Quick start
