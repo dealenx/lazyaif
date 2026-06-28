@@ -18,16 +18,16 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - name: [ci:release] checkout
+      - name: ci:release - checkout
         uses: actions/checkout@v4
 
-      - name: [ci:release] download all build artifacts
+      - name: ci:release - download all build artifacts
         uses: actions/download-artifact@v4
         with:
           path: out
           merge-multiple: false
 
-      - name: [ci:release] flatten artifacts
+      - name: ci:release - flatten artifacts
         run: |
           echo "[ci:release] downloaded artifacts:"
           ls -la out/
@@ -39,7 +39,7 @@ jobs:
           echo "[ci:release] flattened:"
           ls -la release/
 
-      - name: [ci:release] generate checksums.txt
+      - name: ci:release - generate checksums.txt
         run: |
           cd release
           # Only binary assets (exclude .sha256 sidecars and checksums.txt itself)
@@ -51,7 +51,7 @@ jobs:
           echo "[ci:release] checksums.txt:"
           cat checksums.txt
 
-      - name: [ci:release] create GitHub Release
+      - name: ci:release - create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
@@ -62,7 +62,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: [ci:release] summary
+      - name: ci:release - summary
         run: |
           echo "## Release ${{ github.ref_name }} published" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"

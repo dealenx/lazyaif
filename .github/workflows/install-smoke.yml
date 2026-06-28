@@ -18,15 +18,15 @@ jobs:
       matrix:
         runner: [ubuntu-latest, macos-14]
     steps:
-      - name: [smoke] checkout
+      - name: smoke - checkout
         uses: actions/checkout@v4
 
-      - name: [smoke] setup bun
+      - name: smoke - setup bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3
 
-      - name: [smoke] build local binary
+      - name: smoke - build local binary
         working-directory: packages/lazyaif
         run: |
           mkdir -p ../../out
@@ -34,7 +34,7 @@ jobs:
           bun build --compile bin/lazyaif.ts --outfile ../../out/lazyaif-smoke-$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)
           ls -la ../../out/
 
-      - name: [smoke] run install.sh against local mock release
+      - name: smoke - run install.sh against local mock release
         env:
           LAZYAIF_INSTALL_DEBUG: "1"
           LAZYAIF_SMOKE_LOCAL: "1"
@@ -63,15 +63,15 @@ jobs:
     name: Windows installer smoke
     runs-on: windows-latest
     steps:
-      - name: [smoke] checkout
+      - name: smoke - checkout
         uses: actions/checkout@v4
 
-      - name: [smoke] setup bun
+      - name: smoke - setup bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3
 
-      - name: [smoke] build local binary
+      - name: smoke - build local binary
         working-directory: packages/lazyaif
         run: |
           New-Item -ItemType Directory -Force -Path ../../out | Out-Null
@@ -80,7 +80,7 @@ jobs:
           Get-ChildItem ../../out/
         shell: pwsh
 
-      - name: [smoke] run install.ps1 against local mock release
+      - name: smoke - run install.ps1 against local mock release
         env:
           LAZYAIF_INSTALL_DEBUG: "1"
         run: |

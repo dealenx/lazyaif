@@ -54,21 +54,21 @@ jobs:
             ext: ""
 
     steps:
-      - name: [ci:build] checkout
+      - name: ci:build - checkout
         uses: actions/checkout@v4
 
-      - name: [ci:build] setup bun
+      - name: ci:build - setup bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3
 
-      - name: [ci:build] install deps
+      - name: ci:build - install deps
         run: bun install --frozen-lockfile
 
-      - name: [ci:build] typecheck
+      - name: ci:build - typecheck
         run: bun run typecheck
 
-      - name: [ci:build] resolve version
+      - name: ci:build - resolve version
         id: version
         shell: bash
         run: |
@@ -78,7 +78,7 @@ jobs:
             echo "version=dev-$(echo "${GITHUB_SHA}" | cut -c1-7)" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: [ci:build] compile binary
+      - name: ci:build - compile binary
         env:
           LAZYAIF_VERSION: ${{ steps.version.outputs.version }}
         run: |
@@ -88,7 +88,7 @@ jobs:
           echo "[ci:build:${{ matrix.label }}] finished compile"
         shell: bash
 
-      - name: [ci:build] verify binary (non-windows)
+      - name: ci:build - verify binary (non-windows)
         if: matrix.os != 'windows'
         run: |
           BIN="../../out/lazyaif-${{ steps.version.outputs.version }}-${{ matrix.os }}-${{ matrix.arch }}"
@@ -97,7 +97,7 @@ jobs:
           "$BIN" --version
         shell: bash
 
-      - name: [ci:build] verify binary (windows)
+      - name: ci:build - verify binary (windows)
         if: matrix.os == 'windows'
         run: |
           $BIN = "../../out/lazyaif-${{ steps.version.outputs.version }}-${{ matrix.os }}-${{ matrix.arch }}.exe"
@@ -105,7 +105,7 @@ jobs:
           & $BIN --version
         shell: pwsh
 
-      - name: [ci:build] sha256 (unix)
+      - name: ci:build - sha256 (unix)
         if: matrix.os != 'windows'
         working-directory: out
         run: |
@@ -114,7 +114,7 @@ jobs:
           cat "lazyaif-${{ steps.version.outputs.version }}-${{ matrix.os }}-${{ matrix.arch }}.sha256"
         shell: bash
 
-      - name: [ci:build] sha256 (windows)
+      - name: ci:build - sha256 (windows)
         if: matrix.os == 'windows'
         working-directory: out
         run: |
@@ -125,7 +125,7 @@ jobs:
           Get-Content "${asset}.sha256"
         shell: pwsh
 
-      - name: [ci:build] upload artifact
+      - name: ci:build - upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: build-${{ matrix.label }}
