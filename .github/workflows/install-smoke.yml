@@ -29,34 +29,30 @@ jobs:
       - name: smoke - build local binary
         working-directory: packages/lazyaif
         run: |
-          mkdir -p ../../out
+          mkdir -p "$GITHUB_WORKSPACE/out"
           bun install --frozen-lockfile
-          bun build --compile bin/lazyaif.ts --outfile ../../out/lazyaif-smoke-$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)
-          ls -la ../../out/
-
-      - name: smoke - run install.sh against local mock release
-        env:
-          LAZYAIF_INSTALL_DEBUG: "1"
-          LAZYAIF_SMOKE_LOCAL: "1"
-        run: |
-          # Build a mock release dir so the installer can fetch from a local file:// source
-          # instead of hitting GitHub (no release exists for the current commit).
-          arch=$(uname -m)
-          case "$arch" in
+          arch_norm=$(uname -m)
+          case "$arch_norm" in
             x86_64|amd64) arch_norm="x64" ;;
             aarch64|arm64) arch_norm="arm64" ;;
           esac
-          os=$(uname -s | tr '[:upper:]' '[:lower:]')
-          asset="lazyaif-smoke-$os-$arch_norm"
-          mkdir -p mock-release
-          cp "out/$asset" "mock-release/$asset"
-          # Generate checksums.txt (macOS lacks sha256sum, use shasum)
-          (cd mock-release && { command -v sha256sum >/dev/null 2>&1 && sha256sum "$asset" || shasum -a 256 "$asset"; } > checksums.txt)
-          # Run the installer with a fake tag "smoke" by overriding the binary name to match.
-          # The installer is designed for GitHub Releases; here we skip network and just
-          # verify the binary launches directly (smoke = does the binary run).
-          chmod +x "mock-release/$asset"
-          ./mock-release/$asset --version
+          os_norm=$(uname -s | tr '[:upper:]' '[:lower:]')
+          bun build --compile bin/lazyaif.ts --outfile "$GITHUB_WORKSPACE/out/lazyaif-smoke-$os_norm-$arch_norm"
+          ls -la "$GITHUB_WORKSPACE/out/"
+
+      - name: smoke - verify binary launches
+        env:
+          LAZYAIF_INSTALL_DEBUG: "1"
+        run: |
+          arch_norm=$(uname -m)
+          case "$arch_norm" in
+            x86_64|amd64) arch_norm="x64" ;;
+            aarch64|arm64) arch_norm="arm64" ;;
+          esac
+          os_norm=$(uname -s | tr '[:upper:]' '[:lower:]')
+          asset="lazyaif-smoke-$os_norm-$arch_norm"
+          chmod +x "out/$asset"
+          ./out/$asset --version
           echo "[smoke] binary OK"
 
   smoke-windows:
@@ -74,18 +70,16 @@ jobs:
       - name: smoke - build local binary
         working-directory: packages/lazyaif
         run: |
-          New-Item -ItemType Directory -Force -Path ../../out | Out-Null
+          New-Item -ItemType Directory -Force -Path "$env:GITHUB_WORKSPACE/out" | Out-Null
           bun install --frozen-lockfile
-          bun build --compile bin/lazyaif.ts --outfile ../../out/lazyaif-smoke-windows-x64.exe
-          Get-ChildItem ../../out/
+          bun build --compile bin/lazyaif.ts --outfile "$env:GITHUB_WORKSPACE/out/lazyaif-smoke-windows-x64.exe"
+          Get-ChildItem "$env:GITHUB_WORKSPACE/out/"
         shell: pwsh
 
-      - name: smoke - run install.ps1 against local mock release
+      - name: smoke - verify binary launches
         env:
           LAZYAIF_INSTALL_DEBUG: "1"
         run: |
-          # Smoke: verify the built binary launches (full install.ps1 hits GitHub API —
-          # covered manually post-release). Here we confirm the binary works on the runner.
-          ../../out/lazyaif-smoke-windows-x64.exe --version
+          & "$env:GITHUB_WORKSPACE/out/lazyaif-smoke-windows-x64.exe" --version
           Write-Host "[smoke] binary OK"
         shell: pwsh
