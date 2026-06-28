@@ -1,0 +1,73 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build matrix
+    uses: ./.github/workflows/build-matrix.yml
+
+  release:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: [ci:release] checkout
+        uses: actions/checkout@v4
+
+      - name: [ci:release] download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: false
+
+      - name: [ci:release] flatten artifacts
+        run: |
+          echo "[ci:release] downloaded artifacts:"
+          ls -la out/
+          mkdir -p release
+          # Only copy binaries (exclude .sha256 sidecars — checksums.txt replaces them)
+          find out -type f -name 'lazyaif-*' ! -name '*.sha256' | while read -r f; do
+            cp "$f" "release/$(basename "$f")"
+          done
+          echo "[ci:release] flattened:"
+          ls -la release/
+
+      - name: [ci:release] generate checksums.txt
+        run: |
+          cd release
+          # Only binary assets (exclude .sha256 sidecars and checksums.txt itself)
+          ls -la
+          binaries=$(find . -type f -name 'lazyaif-*' ! -name '*.sha256')
+          echo "[ci:release] binaries to hash:"
+          echo "$binaries"
+          echo "$binaries" | xargs sha256sum > checksums.txt
+          echo "[ci:release] checksums.txt:"
+          cat checksums.txt
+
+      - name: [ci:release] create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: |
+            release/*
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: [ci:release] summary
+        run: |
+          echo "## Release ${{ github.ref_name }} published" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Assets" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          ls -la release/
+          cat release/checksums.txt
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
