@@ -7,7 +7,7 @@ Tools for analyzing ai-factory project artifacts.
 ## Quick start
 
 ```bash
-bunx lazyaif tui
+bunx lazyaif
 ```
 
 Commands:
