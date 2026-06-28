@@ -1,6 +1,6 @@
 {
   "name": "lazyaif",
-  "version": "0.1.1",
+  "version": "0.1.10",
   "type": "module",
   "description": "Analyze ai-factory plan statuses (fast/full) via TUI or CLI",
   "bin": {

@@ -152,5 +152,5 @@ export function parsePlanFile(content: string, relativePath: string): Plan {
 
   debug(`[parser] found phases=${phases.length} tasks=${allTasks.length}`);
 
-  return { kind, path: relativePath, fileName, title, branch, created, settings, phases, tasks: allTasks };
+  return { kind, path: relativePath, fileName, title, branch, created, settings, phases, tasks: allTasks, rawMarkdown: content };
 }

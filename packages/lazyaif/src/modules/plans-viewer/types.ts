@@ -38,6 +38,8 @@ export interface Plan {
   settings: PlanSettings;
   phases: Phase[];
   tasks: Task[];
+  /** Исходный markdown файла плана (для рендера в TUI). */
+  rawMarkdown: string;
 }
 
 /** Статус выполнения плана. */
