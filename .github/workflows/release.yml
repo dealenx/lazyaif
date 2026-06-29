@@ -93,12 +93,11 @@ jobs:
         run: bun run prebuild
 
       - name: publish:npm - publish
-        working-directory: packages/lazyaif
-        run: |
-          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
-          npm publish --access public
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        uses: JS-DevTools/npm-publish@v3
+        with:
+          token: ${{ secrets.NPM_TOKEN }}
+          package: packages/lazyaif
+          access: public
 
       - name: publish:npm - summary
         run: |
