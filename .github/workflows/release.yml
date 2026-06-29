@@ -69,3 +69,39 @@ jobs:
           ls -la release/
           cat release/checksums.txt
           echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+  publish-npm:
+    name: Publish to npm
+    needs: release
+    runs-on: ubuntu-latest
+    if: ${{ vars.NPM_TOKEN_AVAILABLE == 'true' }}
+    steps:
+      - name: publish:npm - checkout
+        uses: actions/checkout@v4
+
+      - name: publish:npm - setup bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3
+
+      - name: publish:npm - install deps
+        working-directory: packages/lazyaif
+        run: bun install --frozen-lockfile
+
+      - name: publish:npm - build dist
+        working-directory: packages/lazyaif
+        run: bun run prebuild
+
+      - name: publish:npm - publish
+        working-directory: packages/lazyaif
+        run: |
+          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
+          npm publish --access public
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: publish:npm - summary
+        run: |
+          echo "## npm publish complete" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Published \`lazyaif@${{ github.ref_name }}\` to https://www.npmjs.com/package/lazyaif" >> "$GITHUB_STEP_SUMMARY"

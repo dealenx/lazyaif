@@ -1,4 +1,4 @@
-# Implementation Plan: Deferred markdown parse + debounce onSelect for responsive plan switching
+# Implementation Plan: Align installers/CI with 0.x default branch + auto-publish to npm
 
 Branch: main
 Created: 2026-06-29
@@ -6,68 +6,123 @@ Created: 2026-06-29
 ## Settings
 
 - Testing: no
-- Logging: verbose
-- Docs: no
+- Logging: standard
+- Docs: yes
 
-## Research Context
+## Context
 
-Topic: TUI detail pane подвисает при переключении планов — рендеринг MarkdownRenderable блокирует event loop
-Goal: Сделать переключение планов отзывчивым — стрелки не залипают, markdown рендерится асинхронно
-Constraints:
-  - `new MarkdownRenderable(renderer, { content })` парсит markdown (marked) + строит renderable-дерево синхронно в constructor'е
-  - Файлы планов: 1.7KB–27KB; `aif-plans-viewer.md` = 27KB парсится ощутимо
-  - `updateDetail()` вызывается синхронно из `onSelect` → блокирует event loop
-Decisions:
-  - Подход A (deferred parse): рендерить title/meta/status мгновенно, markdown через `setTimeout(0)`
-  - Подход E (debounce): 100ms debounce на `onSelect` — при удержании стрелки рендерить только последний index
-Success signals:
-  - При быстром переборе стрелок TUI не залипает — подсветка движется плавно
-  - После остановки на плане markdown появляется через ~1 кадр
-  - При одиночном нажатии стрелки markdown виден почти мгновенно (title/meta/status — мгновенно)
+GitHub `default_branch` is now `0.x`, but CI push triggers and README installer
+URLs still reference `main`. As soon as `0.x` moves past `main`:
+
+- `build.yml` and `install-smoke.yml` (both `branches: [main]`) stop firing on
+  pushes to `0.x` — CI silently breaks.
+- `raw.githubusercontent.com/dealenx/lazyaif/main/scripts/install.*` URLs in
+  README start serving a stale installer (silent rot — user installs old code).
+- npm registry lags GitHub Releases (`npm: 0.1.12` vs `GitHub: v0.2.1`) because
+  there is no `npm publish` step in CI. `bunx lazyaif` / `npx lazyaif` delivers
+  the old version even right after a tag release.
+
+All three are silent-failure regressions: nothing throws, users just get stale
+artifacts. This plan fixes the drift so the release pipeline matches the new
+default branch.
 
 ## Tasks
 
-- [x] Task 1: Debounce onSelect to skip intermediate renders during fast scrolling
-  - File: `src/views/plans-viewer/tui-view.ts`
-  - In `createPlansTuiApp`, wrap the `onSelect` callback logic so that rapid arrow-key presses (held down) only render the final target, not every intermediate index
-  - Implementation:
-    - Add a `pendingSelectTimer: ReturnType<typeof setTimeout> | null` variable (closed over in `createPlansTuiApp`)
-    - In the `onSelect` callback: set `selectedIndex = clamped` immediately (so state is correct), but instead of calling `updateDetail()` directly, schedule it via `setTimeout(updateDetail, 100)` and clear any previous pending timer
-    - This means: while user holds ↓ and scrolls through plans 1→2→3→4, only plan #4 gets a `updateDetail()` call 100ms after the last keypress
-    - Guard: keep `selectedIndex` updated immediately so if `dataTick` refresh fires mid-scroll, it uses the correct index
-  - Logging: `debug("[tui:debounce] scheduled render for index=${clamped} in 100ms")`, `debug("[tui:debounce] cancelled previous pending render")`
-  - Notes: 100ms is the debounce window. If user stops for >100ms, render fires. If they keep scrolling, only the last stop triggers render.
+- [x] Task 1: Switch CI push triggers to 0.x
+  - Files: `.github/workflows/build.yml`, `.github/workflows/install-smoke.yml`
+  - Change `on.push.branches: [main]` → `on.push.branches: [0.x]` in both files
+  - Leave `pull_request:` triggers alone (they fire on any target branch when
+    no `branches:` filter is set — already correct for PRs against `0.x`)
+  - Do NOT touch `release.yml` — it triggers on `tags: v*`, branch-independent
+  - Logging: standard (workflow-level; no app logs)
+  - Notes: if you later keep `main` as a mirror, switch to `branches: [main, 0.x]`
+    instead. For now `0.x` only matches the new default-branch reality.
 
-- [x] Task 2: Defer MarkdownRenderable creation to next event loop tick
-  - File: `src/views/plans-viewer/tui-view.ts`
-  - Split `renderTaskDetail` into two phases:
-    - Phase 1 (synchronous, instant): create ScrollBox + title TextRenderable + meta TextRenderable + status TextRenderable + separator TextRenderable — return the ScrollBox immediately so the detail pane shows useful content right away
-    - Phase 2 (deferred, via `setTimeout(0)`): create `MarkdownRenderable` with `content: bodyMarkdown` and add it to the ScrollBox
-  - Implementation:
-    - Change `renderTaskDetail` to return `{ scroll: ScrollBoxRenderable, appendMarkdown: () => void }` OR keep it returning ScrollBox and accept an `onReady` callback — pick the cleaner approach
-    - Recommended: `renderTaskDetail` returns the ScrollBox (with title/meta/status/sep already added). The caller (`updateDetail`) then calls `setTimeout(0, () => { const md = new MarkdownRenderable(...); scroll.add(md); renderer.requestRender(); })`
-    - This frees the event loop between the synchronous part and the markdown parse — arrow keys stay responsive
-    - Guard against stale renders: capture `detailId` in closure; before adding markdown, check that `currentDetail?.id === detailId` — if user already switched to another plan, skip adding markdown for the stale one
-  - Logging: `debug("[tui:detail] sync phase done for ${plan.fileName}, scheduling markdown parse")`, `debug("[tui:detail] deferred markdown ready for ${detailId}")`, `debug("[tui:detail] skipping stale markdown for ${detailId} (current=${currentDetailId})")`
-  - Notes: `setTimeout(0)` is preferred over `queueMicrotask` because it guarantees yielding to the event loop (microtasks run in the same iteration after I/O). This ensures the renderer can process pending keypresses between sync phase and markdown parse.
-  - Depends on: Task 1 (debounce must be in place first, otherwise deferred parse fires for every intermediate plan)
+- [x] Task 2: Update README installer raw URLs to 0.x
+  - File: `README.md`
+  - Line 32: `.../main/scripts/install.sh` → `.../0.x/scripts/install.sh`
+  - Line 40: `.../main/scripts/install.ps1` → `.../0.x/scripts/install.ps1`
+  - Keep the surrounding one-liner commands (`curl -fsSL ... | sh` and
+    `irm ... | iex`) unchanged — only the branch segment in the URL changes
+  - Verify both URLs return HTTP 200 after the edit (they do today — `0.x`
+    and `main` point at the same commit; `0.x` keeps working after they diverge)
+  - Logging: n/a (docs only)
+  - Notes: this is the only place these URLs are referenced. The archived plan
+    `feature-ci-release-installers.md` also contains `main` URLs but it is a
+    historical record — leave it.
 
-- [x] Task 3: Clean up pending timers on shutdown
-  - File: `src/views/plans-viewer/tui-view.ts`
-  - In the `destroy()` function returned by `createPlansTuiApp`, also clear the debounce timer (`pendingSelectTimer`) and any pending markdown-defer timers
-  - Track deferred markdown timers in a `Set<ReturnType<typeof setTimeout>>` or a single `pendingMarkdownTimer` variable; clear them all in `destroy()`
-  - Logging: `debug("[tui:shutdown] clearing pending select + markdown timers")`
-  - Depends on: Tasks 1, 2
-
-- [x] Task 4: Detect new/deleted .ai-factory/PLAN.md (fast plan) in dataTick
-  - File: `src/views/plans-viewer/tui-view.ts`
-  - Bug: `dataTick` checks `readdir(plansDir)` for new files in `plans/`, but `PLAN.md` (fast plan) lives at `.ai-factory/PLAN.md` — outside `plans/`. A newly created `PLAN.md` is invisible to the refresh loop.
-  - Fix: in `dataTick`, after the existing `readdir(plansDir)` block, add an explicit check for `fastPath`:
-    ```ts
-    const fastExists = await pathExists(fastPath);
-    const hasFastPlan = plans.some((p) => p.kind === "fast");
-    if (fastExists !== hasFastPlan) changedCount++;
+- [x] Task 3: Add npm publish step to release.yml
+  - File: `.github/workflows/release.yml`
+  - Add a new `publish-npm` job that runs AFTER the `release` job
+    (`needs: release`), on `ubuntu-latest`, gated on the `NPM_TOKEN` repo secret
+  - Steps:
+    1. `actions/checkout@v4`
+    2. `oven-sh/setup-bun@v2` with `bun-version: 1.3`
+    3. `cd packages/lazyaif && bun install --frozen-lockfile`
+    4. `cd packages/lazyaif && bun run prebuild` (builds `dist/` for the npm tarball)
+    5. `cd packages/lazyaif && npm publish --access public` with
+       `env: { NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }} }` — use the
+       `npm` CLI auth via a per-step `.npmrc`:
+       ```yaml
+       - run: |
+           echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
+           cd packages/lazyaif && npm publish --access public
+         env:
+           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+       ```
+       (bun also supports `npm publish`; either works. `npm` is used here so
+       the auth token via `.npmrc` is unambiguous.)
+    6. Summary step: echo publish result to `$GITHUB_STEP_SUMMARY`
+  - Gate the whole job on the secret existing so a missing `NPM_TOKEN` fails
+    loudly rather than silently shipping nothing:
+    ```yaml
+    publish-npm:
+      needs: release
+      runs-on: ubuntu-latest
+      if: ${{ secrets.NPM_TOKEN != '' }}
+      ...
     ```
-  - This catches both: new `PLAN.md` appearing (fastExists=true, hasFastPlan=false) and `PLAN.md` deleted (fastExists=false, hasFastPlan=true). The mtime-change case for existing `PLAN.md` is already handled by the `for plan in plans` stat loop.
-  - Logging: `debug("[tui:refresh] fast plan check: fastExists=${fastExists} hasFastPlan=${hasFastPlan}")`
-  - Depends on: nothing (independent of Tasks 1-3)
+    (GitHub Actions cannot directly compare secrets in `if:`; use a workflow
+    env guard if needed: `env: HAS_TOKEN: ${{ secrets.NPM_TOKEN != '' }}`
+    then `if: env.HAS_TOKEN == 'true'`.)
+  - Logging: standard — each step echoes what it does; publish failure surfaces
+    via the job status
+  - Depends on: Task 1 (so the release workflow that now builds on `0.x` triggers
+    correctly on tags pushed from `0.x`) — strictly, release triggers on tags
+    regardless of branch, but keeping ordering avoids confusion
+  - Notes:
+    - `package.json` version (`0.2.1`) must equal the tag (`v0.2.1`) for a clean
+      publish. The current manual flow relies on the committer to bump
+      `package.json` before tagging — keep that convention; this task does NOT
+      add auto-versioning, just auto-publishing.
+    - The npm badge in README already points at the npm registry; once this
+      step runs, the badge and `bunx lazyaif` will stay in sync with releases.
+
+- [x] Task 4: Docs checkpoint — verify README reflects auto-publish + 0.x
+  - File: `README.md`
+  - After Tasks 1–3, re-read README and confirm:
+    - Installer one-liners use `0.x` (from Task 2)
+    - npm badge still relevant and will now track releases (from Task 3)
+    - "Prebuilt binaries are published to GitHub Releases on tag push" line is
+      still accurate — no wording change needed, but verify it is there
+  - Optional: add a one-line note under `### npm` that releases publish to npm
+    automatically on tag (e.g. "Published to npm automatically on tag push")
+    so users know `bunx lazyaif` stays current
+  - Mandatory checkpoint per `Docs: yes` setting — route via docs policy
+  - Logging: n/a (docs)
+  - Depends on: Tasks 1, 2, 3
+
+## Commit Plan
+
+Fewer than 5 tasks → single commit at the end:
+
+```
+chore(release): align CI and installers with 0.x default branch + add npm publish
+```
+
+## Out of Scope
+
+- darwin-x64 friendly error in install.sh (you opted out)
+- Extending install-smoke to run installers against a real GitHub Release (out of scope)
+- Auto-bumping package.json version from the git tag (keep manual)
+- Deleting the `main` branch (kept as-is)

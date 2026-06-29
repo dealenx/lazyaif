@@ -2,7 +2,7 @@ name: install-smoke
 
 on:
   push:
-    branches: [main]
+    branches: [0.x]
   pull_request:
   workflow_dispatch:
 
