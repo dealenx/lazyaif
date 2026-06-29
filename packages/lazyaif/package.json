@@ -1,6 +1,6 @@
 {
   "name": "lazyaif",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "type": "module",
   "description": "Analyze ai-factory plan statuses (fast/full) via TUI or CLI",
   "license": "MIT",
