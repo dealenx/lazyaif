@@ -29,7 +29,7 @@ Prebuilt binaries are published to [GitHub Releases](https://github.com/dealenx/
 ### Unix (macOS / Linux)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/dealenx/lazyaif/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/dealenx/lazyaif/0.x/scripts/install.sh | sh
 ```
 
 Installs to `~/.local/bin/lazyaif` (override with `LAZYAIF_INSTALL_DIR=/path`).
@@ -37,12 +37,14 @@ Installs to `~/.local/bin/lazyaif` (override with `LAZYAIF_INSTALL_DIR=/path`).
 ### Windows (PowerShell)
 
 ```powershell
-irm https://raw.githubusercontent.com/dealenx/lazyaif/main/scripts/install.ps1 | iex
+irm https://raw.githubusercontent.com/dealenx/lazyaif/0.x/scripts/install.ps1 | iex
 ```
 
 Installs to `%LOCALAPPDATA%\lazyaif\lazyaif.exe` (override with `$env:LAZYAIF_INSTALL_DIR = "C:\path"`).
 
 ### npm
+
+Published to npm automatically on tag push.
 
 ```bash
 bunx lazyaif
