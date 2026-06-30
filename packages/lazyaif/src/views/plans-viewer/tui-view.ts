@@ -24,6 +24,7 @@ import {
 } from "../../modules/plans-viewer/index.js";
 import type { Plan, PlanStatus } from "../../modules/plans-viewer/types.js";
 import { colors, markdownSyntaxStyle, extractPlanBody, renderHeader, renderFooter, HOTKEYS_LIST, HOTKEYS_DETAIL } from "../../clients/tui/components/index.js";
+import { renderTaskList } from "./task-list-view.js";
 import { stat, readdir, access } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -34,6 +35,7 @@ function debug(msg: string): void { if (shouldLog()) console.debug(msg); }
 
 const DATA_REFRESH_MS = 2000;
 const LABEL_REFRESH_MS = 1000;
+const RESPONSIVE_THRESHOLD = 100;
 
 async function pathExists(p: string): Promise<boolean> {
   try { await access(p); return true; } catch { return false; }
@@ -63,13 +65,14 @@ export function renderPlanList(
   statuses: PlanStatus[],
   onSelect: (index: number) => void,
   onOpen: (index: number) => void,
+  width: number | "auto" | `${number}%` = "40%",
 ): SelectRenderable {
-  console.debug(`[tui:plan-list] rendering plans count=${plans.length}`);
+  console.debug(`[tui:plan-list] rendering plans count=${plans.length} width=${width}`);
   const options = buildOptions(plans, statuses, Date.now());
 
   const select = new SelectRenderable(renderer, {
     id: "plan-list",
-    width: "40%",
+    width,
     height: "100%",
     options,
     backgroundColor: colors.bg,
@@ -255,10 +258,17 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
     width: "100%",
   });
 
+  const showTasks = renderer.width >= RESPONSIVE_THRESHOLD;
+  console.debug(`[tui:responsive] showTasks=${showTasks} width=${renderer.width} threshold=${RESPONSIVE_THRESHOLD}`);
+  const planListWidth: number | "auto" | `${number}%` = showTasks ? "40%" : "100%";
+
   let viewMode: "list" | "detail" = "list";
   let currentDetail: { id: string; renderable: ScrollBoxRenderable } | null = null;
+  let currentTaskList: { id: string; renderable: ScrollBoxRenderable } | null = null;
+  let currentTaskListPlanFileName: string | null = null;
   let pendingMarkdownTimer: ReturnType<typeof setTimeout> | null = null;
   let listMounted = false;
+  let taskListMounted = false;
   let onModeChange: ((mode: "list" | "detail") => void) | null = null;
   // Forward declaration — the real `quitTui` is assigned below
   // after the `destroy` callback has been defined. The placeholder
@@ -269,6 +279,49 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
     console.debug(`[tui:quit] phase=early-noop (destroy not yet assigned)`);
   };
   let quitInProgress = false;
+
+  const rebuildTaskList = () => {
+    if (!showTasks) {
+      debug(`[tui:task-list] rebuild skipped (showTasks=false)`);
+      return;
+    }
+    if (viewMode !== "list") {
+      debug(`[tui:task-list] rebuild skipped (viewMode=${viewMode})`);
+      return;
+    }
+    const plan = plans[selectedIndex];
+    if (!plan) {
+      debug(`[tui:task-list] rebuild skipped (no plan at index=${selectedIndex})`);
+      return;
+    }
+    if (currentTaskListPlanFileName === plan.fileName && taskListMounted) {
+      debug(`[tui:task-list] rebuild skipped (same plan=${plan.fileName})`);
+      return;
+    }
+    if (currentTaskList && taskListMounted) {
+      try { bodyRow.remove(currentTaskList.id); } catch (e) { console.warn(`[tui:task-list] bodyRow.remove failed`, e); }
+      try { currentTaskList.renderable.destroy(); } catch { /* noop */ }
+      currentTaskList = null;
+      taskListMounted = false;
+    }
+    const taskListId = `task-list-${selectedIndex}`;
+    console.debug(`[tui:task-list] rebuild plan=${plan.fileName} index=${selectedIndex} id=${taskListId}`);
+    const taskList = renderTaskList(renderer, plan, taskListId, "60%");
+    bodyRow.add(taskList);
+    currentTaskList = { id: taskListId, renderable: taskList };
+    currentTaskListPlanFileName = plan.fileName;
+    taskListMounted = true;
+    renderer.requestRender();
+  };
+
+  const removeTaskList = () => {
+    if (currentTaskList && taskListMounted) {
+      try { bodyRow.remove(currentTaskList.id); } catch (e) { console.warn(`[tui:task-list] removeTaskList bodyRow.remove failed`, e); }
+      try { currentTaskList.renderable.destroy(); } catch { /* noop */ }
+      currentTaskList = null;
+      taskListMounted = false;
+    }
+  };
 
   const enterDetailMode = () => {
     if (viewMode === "detail") {
@@ -283,6 +336,10 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
       return;
     }
     console.debug(`[tui:mode] enterDetailMode: list->detail plan=${plan.fileName} index=${selectedIndex}`);
+    if (showTasks) {
+      console.debug(`[tui:mode] enterDetailMode: hiding task list (showTasks=${showTasks})`);
+      removeTaskList();
+    }
     if (listMounted) {
       try { bodyRow.remove(planList.id); } catch (e) { console.warn(`[tui:mode] bodyRow.remove(planList) failed`, e); }
       listMounted = false;
@@ -337,6 +394,11 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
       bodyRow.add(planList);
       listMounted = true;
     }
+    if (showTasks) {
+      currentTaskListPlanFileName = null;
+      rebuildTaskList();
+      console.debug(`[tui:mode] enterListMode: restoring task list for plan=${plans[selectedIndex]?.fileName}`);
+    }
     try { select.focus(); } catch (e) { console.warn(`[tui:mode] select.focus() failed`, e); }
     if (onModeChange) onModeChange(viewMode);
     renderer.requestRender();
@@ -358,6 +420,9 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
         return;
       }
       selectedIndex = clamped;
+      if (showTasks && viewMode === "list") {
+        rebuildTaskList();
+      }
       if (pendingSelectTimer) {
         debug(`[tui:debounce] cancelled previous pending render`);
         clearTimeout(pendingSelectTimer);
@@ -384,11 +449,15 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
       }
       enterDetailMode();
     },
+    planListWidth,
   );
   select = planList;
 
   bodyRow.add(planList);
   listMounted = true;
+  if (showTasks) {
+    rebuildTaskList();
+  }
 
   root.add(renderHeader(renderer, rootDir));
   root.add(bodyRow);
@@ -521,7 +590,14 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
       if (selectionChanged) {
         select.setSelectedIndex(newIndex);
         if (viewMode === "detail") enterDetailMode();
-        else console.debug(`[tui:refresh] data tick: skipping detail re-mount in list mode`);
+        else {
+          console.debug(`[tui:refresh] data tick: skipping detail re-mount in list mode`);
+          if (showTasks) {
+            currentTaskListPlanFileName = null;
+            rebuildTaskList();
+            console.debug(`[tui:refresh] data tick: task list rebuilt for plan=${plans[selectedIndex]?.fileName}`);
+          }
+        }
       }
       renderer.requestRender();
     } catch (e) {
@@ -599,6 +675,7 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
       clearTimeout(pendingMarkdownTimer);
       pendingMarkdownTimer = null;
     }
+    removeTaskList();
     try { renderer.keyInput.off("keypress", keypressHandler); } catch (e) { console.warn(`[tui:shutdown] keyInput.off failed`, e); }
   };
 

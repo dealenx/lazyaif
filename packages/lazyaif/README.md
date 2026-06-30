@@ -40,6 +40,19 @@ npm run tui                            # interactive viewer on cwd
 npm run tui -- --path ../other-proj    # scan a different project
 ```
 
+#### Layout
+
+By default the TUI shows two panes side by side:
+
+- **Left (40%)** — list of plans (kind, filename, progress, counts, age)
+- **Right (60%)** — flat list of Tasks of the currently selected plan
+  (`☑`/`☐` checkbox, `id: title`), updates as you navigate with arrows
+
+On small terminals (width < 100 columns) the Tasks pane is hidden
+automatically and the plan list takes the full width. Enter/Tab switches
+to the detail view (full-width markdown of the selected plan), Esc/Tab
+returns to the list view and restores the Tasks pane.
+
 ## TUI Runtime Requirements
 
 The TUI uses OpenTUI which requires FFI:
