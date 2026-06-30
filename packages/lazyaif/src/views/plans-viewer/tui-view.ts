@@ -327,14 +327,15 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
     try {
       const aiFactoryDir = join(rootDir, ".ai-factory");
       const plansDir = join(aiFactoryDir, "plans");
-      const fastPath = join(aiFactoryDir, "PLAN.md");
+      const fastFileNames = new Set(plans.filter((p) => p.kind === "fast").map((p) => p.fileName));
+      const fastPathFor = (fileName: string) => join(aiFactoryDir, fileName);
 
       const currentPaths = new Set(plans.map((p) => p.fileName));
       const newMtimes = new Map<string, number>();
       let changedCount = 0;
 
       for (const plan of plans) {
-        const fullPath = plan.kind === "fast" ? fastPath : join(plansDir, plan.fileName);
+        const fullPath = plan.kind === "fast" ? fastPathFor(plan.fileName) : join(plansDir, plan.fileName);
         try {
           const s = await stat(fullPath);
           newMtimes.set(plan.fileName, s.mtimeMs);
@@ -355,7 +356,7 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
             }
           }
           for (const p of currentPaths) {
-            if (p !== "PLAN.md" && !mdFiles.includes(p)) {
+            if (!fastFileNames.has(p) && !mdFiles.includes(p)) {
               changedCount++;
               break;
             }
@@ -363,10 +364,15 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
         } catch { /* ignore */ }
       }
 
-      const fastExists = await pathExists(fastPath);
-      const hasFastPlan = plans.some((p) => p.kind === "fast");
-      debug(`[tui:refresh] fast plan check: fastExists=${fastExists} hasFastPlan=${hasFastPlan}`);
-      if (fastExists !== hasFastPlan) changedCount++;
+      for (const fileName of fastFileNames) {
+        const exists = await pathExists(fastPathFor(fileName));
+        const inMemory = plans.some((p) => p.kind === "fast" && p.fileName === fileName);
+        debug(`[tui:refresh] fast plan check: file=${fileName} exists=${exists} inMemory=${inMemory}`);
+        if (exists !== inMemory) {
+          changedCount++;
+          break;
+        }
+      }
 
       if (changedCount === 0) return;
 

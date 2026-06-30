@@ -15,6 +15,8 @@ async function pathExists(p: string): Promise<boolean> {
   try { await access(p); return true; } catch { return false; }
 }
 
+const FAST_PLAN_FILES = ["PLAN.md", "FIX_PLAN.md"] as const;
+
 export async function scanAiFactory(rootDir: string): Promise<Plan[]> {
   debug(`[scanner] scanning rootDir=${rootDir}`);
   const aiFactoryDir = join(rootDir, ".ai-factory");
@@ -25,15 +27,16 @@ export async function scanAiFactory(rootDir: string): Promise<Plan[]> {
     return [];
   }
 
-  const fastPath = join(aiFactoryDir, "PLAN.md");
-  if (await pathExists(fastPath)) {
+  for (const fileName of FAST_PLAN_FILES) {
+    const fastPath = join(aiFactoryDir, fileName);
+    if (!(await pathExists(fastPath))) continue;
     try {
       const content = await readFile(fastPath, "utf-8");
-      const relPath = ["", ".ai-factory", "PLAN.md"].join(sep);
+      const relPath = ["", ".ai-factory", fileName].join(sep);
       const mtime = await readMtimeMs(fastPath);
       debug(`[scanner] mtime=${relPath}=${mtime}`);
       plans.push({ ...parsePlanFile(content, relPath), mtime });
-    } catch (e) { warn(`[scanner] failed to read PLAN.md: ${e}`); }
+    } catch (e) { warn(`[scanner] failed to read ${fileName}: ${e}`); }
   }
 
   const plansDir = join(aiFactoryDir, "plans");
