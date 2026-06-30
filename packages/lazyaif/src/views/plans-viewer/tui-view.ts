@@ -95,6 +95,10 @@ export function renderPlanList(
     onOpen(index);
   });
 
+  let lastClickTime = 0;
+  let lastClickIndex = -1;
+  const DOUBLE_CLICK_MS = 300;
+
   select.onMouseDown = (event: MouseEvent) => {
     if (event.button !== 0) return;
     const localY = event.y - select.screenY;
@@ -108,6 +112,27 @@ export function renderPlanList(
     event.preventDefault();
     event.stopPropagation();
     select.setSelectedIndex(actualIndex);
+
+    const now = Date.now();
+    if (now - lastClickTime < DOUBLE_CLICK_MS && lastClickIndex === actualIndex) {
+      console.debug(`[tui:plan-list] double click -> open index=${actualIndex}`);
+      lastClickTime = 0;
+      lastClickIndex = -1;
+      onOpen(actualIndex);
+    } else {
+      lastClickTime = now;
+      lastClickIndex = actualIndex;
+    }
+  };
+
+  select.onMouseScroll = (event: MouseEvent) => {
+    if (!event.scroll) return;
+    const dir = event.scroll.direction;
+    console.debug(`[tui:plan-list] mouse scroll dir=${dir} delta=${event.scroll.delta}`);
+    event.preventDefault();
+    event.stopPropagation();
+    if (dir === "up") select.moveUp();
+    else if (dir === "down") select.moveDown();
   };
 
   select.focus();
