@@ -95,8 +95,7 @@ export function renderPlanList(
     onOpen(index);
   });
 
-  select.on("mouse", (event: MouseEvent) => {
-    if (event.type !== "down") return;
+  select.onMouseDown = (event: MouseEvent) => {
     if (event.button !== 0) return;
     const localY = event.y - select.screenY;
     if (localY < 0) return;
@@ -109,7 +108,7 @@ export function renderPlanList(
     event.preventDefault();
     event.stopPropagation();
     select.setSelectedIndex(actualIndex);
-  });
+  };
 
   select.focus();
   return select;
