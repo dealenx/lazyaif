@@ -16,21 +16,21 @@ describe("computeStatus", () => {
     const content = await fixture("full-plan-done.md");
     const plan = parsePlanFile(content, "plans/full-plan-done.md");
     const s = computeStatus(plan);
-    expect(s).toEqual({ done: 1, total: 1, pct: 100, state: "done" });
+    expect(s).toEqual({ done: 1, total: 1, pct: 100, state: "done", inProgress: 0, notStarted: 0 });
   });
 
   it("returns in-progress for partial plan", async () => {
     const content = await fixture("full-plan-partial.md");
     const plan = parsePlanFile(content, "plans/full-plan-partial.md");
     const s = computeStatus(plan);
-    expect(s).toEqual({ done: 2, total: 4, pct: 50, state: "in-progress" });
+    expect(s).toEqual({ done: 2, total: 4, pct: 50, state: "in-progress", inProgress: 2, notStarted: 0 });
   });
 
   it("returns not-started for empty plan", async () => {
     const content = await fixture("full-plan-empty.md");
     const plan = parsePlanFile(content, "plans/full-plan-empty.md");
     const s = computeStatus(plan);
-    expect(s).toEqual({ done: 0, total: 3, pct: 0, state: "not-started" });
+    expect(s).toEqual({ done: 0, total: 3, pct: 0, state: "not-started", inProgress: 3, notStarted: 0 });
   });
 });
 

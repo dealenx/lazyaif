@@ -50,4 +50,14 @@ export interface PlanStatus {
   total: number;
   pct: number;
   state: PlanState;
+  /**
+   * Tasks that are not done but have a non-empty description — i.e.
+   * work has been started on them in the plan text. This is a
+   * heuristic, not parser-derived state, because the plan schema
+   * only has `done: boolean` per task. If a future parser change
+   * adds a real `state` field, this heuristic can be replaced.
+   */
+  inProgress?: number;
+  /** Tasks that are not done and have an empty description. */
+  notStarted?: number;
 }

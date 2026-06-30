@@ -12,5 +12,10 @@ export function computeStatus(plan: PlanLike): PlanStatus {
   else if (done === 0) state = "not-started";
   else state = "in-progress";
 
-  return { done, total, pct, state };
+  const inProgress = plan.tasks.filter((t) => !t.done && t.description.trim().length > 0).length;
+  const notStarted = total - done - inProgress;
+
+  console.debug(`[status:compute] done=${done} inProgress=${inProgress} notStarted=${notStarted} total=${total}`);
+
+  return { done, total, pct, state, inProgress, notStarted };
 }
