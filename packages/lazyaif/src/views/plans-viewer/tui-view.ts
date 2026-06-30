@@ -562,6 +562,23 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
     quitInProgress = true;
     console.debug(`[tui:quit] phase=destroy-cb`);
     try { destroy(); } catch (e) { console.warn(`[tui:quit] destroy-cb failed`, e); }
+    // Emit mouse-disable + kitty-keyboard-disable sequences while
+    // raw mode is still on, so the terminal receives them cleanly.
+    // Without this, opentui's cleanupBeforeDestroy() flips
+    // _useMouse = false but does NOT send \x1b[?1006l /
+    // \x1b[?1000l / \x1b[?1003l, and the shell keeps SGR mouse
+    // tracking on after exit — which shows up as garbled
+    // `35;86;…;1M` fragments on the prompt line (opentui
+    // issue #904, still open in @opentui/core@0.4.2).
+    //
+    // Workaround for an upstream opentui bug. When opentui
+    // merges PR #905 and we bump the dep, these two calls can
+    // be removed — renderer.destroy() will do the right thing
+    // on its own.
+    console.debug(`[tui:quit] phase=disable-mouse`);
+    try { (renderer as unknown as { disableMouse?: () => void }).disableMouse?.(); } catch (e) { console.warn(`[tui:quit] disableMouse failed`, e); }
+    console.debug(`[tui:quit] phase=disable-kitty-keyboard`);
+    try { (renderer as unknown as { disableKittyKeyboard?: () => void }).disableKittyKeyboard?.(); } catch (e) { console.warn(`[tui:quit] disableKittyKeyboard failed`, e); }
     console.debug(`[tui:quit] phase=renderer-destroy`);
     try { renderer.destroy(); } catch (e) { console.warn(`[tui:quit] renderer.destroy failed`, e); }
     console.debug(`[tui:quit] phase=process-exit`);
