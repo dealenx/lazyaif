@@ -7,6 +7,7 @@ import {
   SelectRenderable,
   SelectRenderableEvents,
   MarkdownRenderable,
+  KeyEvent,
   t,
   bold,
   fg,
@@ -22,7 +23,7 @@ import {
   sortByMtimeDesc,
 } from "../../modules/plans-viewer/index.js";
 import type { Plan, PlanStatus } from "../../modules/plans-viewer/types.js";
-import { colors, markdownSyntaxStyle, extractPlanBody, renderHeader, renderFooter } from "../../clients/tui/components/index.js";
+import { colors, markdownSyntaxStyle, extractPlanBody, renderHeader, renderFooter, HOTKEYS_LIST, HOTKEYS_DETAIL } from "../../clients/tui/components/index.js";
 import { stat, readdir, access } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -114,12 +115,13 @@ export function renderTaskDetail(
   plan: Plan,
   status: PlanStatus,
   id: string,
+  width: number | "auto" | `${number}%` = "100%",
 ): ScrollBoxRenderable {
-  console.debug(`[tui:task-detail] sync phase: plan=${plan.fileName} tasks=${plan.tasks.length} id=${id}`);
+  console.debug(`[tui:task-detail] sync phase: plan=${plan.fileName} tasks=${plan.tasks.length} id=${id} width=${width}`);
 
   const scroll = new ScrollBoxRenderable(renderer, {
     id,
-    width: "60%",
+    width,
     height: "100%",
     viewportCulling: true,
     rootOptions: { backgroundColor: colors.bg },
@@ -239,7 +241,7 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
     emptyBox.add(emptyText);
     root.add(renderHeader(renderer, rootDir));
     root.add(emptyBox);
-    root.add(renderFooter(renderer));
+    root.add(renderFooter(renderer, "list"));
     renderer.root.add(root);
     return { destroy: () => {} };
   }
@@ -251,15 +253,28 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
     width: "100%",
   });
 
+  let viewMode: "list" | "detail" = "list";
   let currentDetail: { id: string; renderable: ScrollBoxRenderable } | null = null;
   let pendingMarkdownTimer: ReturnType<typeof setTimeout> | null = null;
+  let listMounted = false;
+  let onModeChange: ((mode: "list" | "detail") => void) | null = null;
 
-  const updateDetail = () => {
-    console.debug(`[tui:app] updateDetail index=${selectedIndex} plan=${plans[selectedIndex]?.fileName ?? "<none>"}`);
+  const enterDetailMode = () => {
+    if (viewMode === "detail") {
+      console.debug(`[tui:mode] enterDetailMode: already in detail, no-op`);
+      return;
+    }
+    viewMode = "detail";
     const plan = plans[selectedIndex];
     if (!plan) {
-      console.warn(`[tui:app] no plan at index=${selectedIndex}, keeping current detail`);
+      console.warn(`[tui:mode] enterDetailMode: no plan at index=${selectedIndex}, aborting`);
+      viewMode = "list";
       return;
+    }
+    console.debug(`[tui:mode] enterDetailMode: list->detail plan=${plan.fileName} index=${selectedIndex}`);
+    if (listMounted) {
+      try { bodyRow.remove(planList.id); } catch (e) { console.warn(`[tui:mode] bodyRow.remove(planList) failed`, e); }
+      listMounted = false;
     }
     if (pendingMarkdownTimer) {
       debug(`[tui:detail] cancelling pending markdown timer from previous render`);
@@ -267,15 +282,16 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
       pendingMarkdownTimer = null;
     }
     if (currentDetail) {
-      console.debug(`[tui:app] removing previous detail id=${currentDetail.id}`);
-      try { bodyRow.remove(currentDetail.id); } catch (e) { console.warn(`[tui:app] bodyRow.remove failed`, e); }
+      console.debug(`[tui:mode] removing previous detail id=${currentDetail.id}`);
+      try { bodyRow.remove(currentDetail.id); } catch (e) { console.warn(`[tui:mode] bodyRow.remove(detail) failed`, e); }
       try { currentDetail.renderable.destroy(); } catch { /* noop */ }
+      currentDetail = null;
     }
     const detailId = `plan-detail-${selectedIndex}`;
-    const detail = renderTaskDetail(renderer, plan, statuses[selectedIndex], detailId);
+    const detail = renderTaskDetail(renderer, plan, statuses[selectedIndex], detailId, "100%");
     bodyRow.add(detail);
     currentDetail = { id: detailId, renderable: detail };
-    console.debug(`[tui:app] mounted new detail id=${detailId} plan=${plan.fileName}`);
+    console.debug(`[tui:mode] mounted detail id=${detailId} plan=${plan.fileName}`);
 
     pendingMarkdownTimer = appendMarkdownDeferred(
       renderer,
@@ -284,6 +300,35 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
       `${detailId}-md`,
       () => currentDetail?.id !== detailId,
     );
+    try { detail.focus(); } catch (e) { console.warn(`[tui:mode] detail.focus() failed`, e); }
+    if (onModeChange) onModeChange(viewMode);
+    renderer.requestRender();
+  };
+
+  const enterListMode = () => {
+    if (viewMode === "list") {
+      console.debug(`[tui:mode] enterListMode: already in list, no-op`);
+      return;
+    }
+    viewMode = "list";
+    console.debug(`[tui:mode] enterListMode: detail->list index=${selectedIndex}`);
+    if (pendingMarkdownTimer) {
+      debug(`[tui:detail] cancelling pending markdown timer on mode exit`);
+      clearTimeout(pendingMarkdownTimer);
+      pendingMarkdownTimer = null;
+    }
+    if (currentDetail) {
+      try { bodyRow.remove(currentDetail.id); } catch (e) { console.warn(`[tui:mode] bodyRow.remove(detail) failed`, e); }
+      try { currentDetail.renderable.destroy(); } catch { /* noop */ }
+      currentDetail = null;
+    }
+    if (!listMounted) {
+      bodyRow.add(planList);
+      listMounted = true;
+    }
+    try { select.focus(); } catch (e) { console.warn(`[tui:mode] select.focus() failed`, e); }
+    if (onModeChange) onModeChange(viewMode);
+    renderer.requestRender();
   };
 
   let pendingSelectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -302,21 +347,55 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
       debug(`[tui:debounce] cancelled previous pending render`);
       clearTimeout(pendingSelectTimer);
     }
-    debug(`[tui:debounce] scheduled render for index=${clamped} in ${DEBOUNCE_MS}ms`);
+    debug(`[tui:debounce] scheduled render for index=${clamped} in ${DEBOUNCE_MS}ms (mode=${viewMode})`);
     pendingSelectTimer = setTimeout(() => {
       pendingSelectTimer = null;
-      updateDetail();
+      if (viewMode === "detail") enterDetailMode();
+      else console.debug(`[tui:debounce] skipping detail render in list mode for index=${clamped}`);
     }, DEBOUNCE_MS);
   });
   select = planList;
 
   bodyRow.add(planList);
-  updateDetail();
+  listMounted = true;
 
   root.add(renderHeader(renderer, rootDir));
   root.add(bodyRow);
-  root.add(renderFooter(renderer));
+  const footerBox = renderFooter(renderer, viewMode);
+  onModeChange = (mode) => {
+    footerBox.hotkeysText.content = mode === "list" ? HOTKEYS_LIST : HOTKEYS_DETAIL;
+    console.debug(`[tui:footer] hotkeys updated mode=${mode}`);
+  };
+  root.add(footerBox);
   renderer.root.add(root);
+
+  const keypressHandler = (event: KeyEvent) => {
+    if (event.repeated) return;
+    console.debug(`[tui:keypress] name=${event.name} ctrl=${event.ctrl} meta=${event.meta} mode=${viewMode}`);
+    if (event.name === "tab") {
+      event.preventDefault();
+      if (plans.length === 0) {
+        console.debug(`[tui:mode] tab ignored: no plans`);
+        return;
+      }
+      if (viewMode === "list") enterDetailMode();
+      else enterListMode();
+      return;
+    }
+    if (event.name === "escape") {
+      if (viewMode !== "detail") return;
+      event.preventDefault();
+      enterListMode();
+      return;
+    }
+    if (event.name === "q") {
+      event.preventDefault();
+      console.debug(`[tui:quit] exiting via q keypress`);
+      process.exit(0);
+    }
+  };
+  renderer.keyInput.on("keypress", keypressHandler);
+  console.debug(`[tui:keypress] global handler registered`);
 
   const refreshState: { dataInterval: ReturnType<typeof setInterval> | null; labelInterval: ReturnType<typeof setInterval> | null } = {
     dataInterval: null,
@@ -396,7 +475,8 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
       select.options = buildOptions(plans, statuses, Date.now());
       if (selectionChanged) {
         select.setSelectedIndex(newIndex);
-        updateDetail();
+        if (viewMode === "detail") enterDetailMode();
+        else console.debug(`[tui:refresh] data tick: skipping detail re-mount in list mode`);
       }
       renderer.requestRender();
     } catch (e) {
@@ -426,7 +506,7 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
   refreshState.labelInterval = setInterval(labelTick, LABEL_REFRESH_MS);
 
   const destroy = () => {
-    debug("[tui:shutdown] clearing refresh intervals + pending timers");
+    debug("[tui:shutdown] clearing refresh intervals + pending timers + keypress listener");
     if (refreshState.dataInterval) clearInterval(refreshState.dataInterval);
     if (refreshState.labelInterval) clearInterval(refreshState.labelInterval);
     refreshState.dataInterval = null;
@@ -439,6 +519,7 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
       clearTimeout(pendingMarkdownTimer);
       pendingMarkdownTimer = null;
     }
+    try { renderer.keyInput.off("keypress", keypressHandler); } catch (e) { console.warn(`[tui:shutdown] keyInput.off failed`, e); }
   };
 
   return { destroy };

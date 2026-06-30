@@ -1,10 +1,8 @@
 import { describe, it, expect, afterEach } from "bun:test";
 import { createCliRenderer } from "@opentui/core";
 import type { CliRenderer } from "@opentui/core";
-import { renderFooter } from "../../../../src/clients/tui/components/footer.js";
+import { renderFooter, HOTKEYS_LIST } from "../../../../src/clients/tui/components/footer.js";
 import { VERSION } from "../../../../src/shared/version.js";
-
-const HOTKEYS = "Arrows/Enter: select · Mouse click: select · auto-refresh: 2s · q: quit";
 
 type Chunk = { text?: string };
 type StyledLike = { chunks?: Chunk[] };
@@ -55,7 +53,7 @@ describe("renderFooter", () => {
     const box = renderFooter(r);
     const hotkeys = box.getRenderable("tui-footer-text");
     expect(hotkeys).toBeDefined();
-    expect(textOf(hotkeys)).toBe(HOTKEYS);
+    expect(textOf(hotkeys)).toBe(HOTKEYS_LIST);
   });
 
   it("includes spacers to center the hotkeys", async () => {

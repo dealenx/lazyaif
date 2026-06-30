@@ -3,8 +3,14 @@ import type { CliRenderer } from "@opentui/core";
 import { colors } from "./theme.js";
 import { VERSION } from "../../../shared/version.js";
 
-export function renderFooter(renderer: CliRenderer): BoxRenderable {
-  console.debug(`[tui:footer] rendering version=${VERSION} hotkeys hint`);
+export const HOTKEYS_LIST = "Arrows/Enter: select · Mouse click: select · auto-refresh: 2s · Tab: open · q: quit";
+export const HOTKEYS_DETAIL = "Arrows/PageUp/PageDown: scroll · Tab/Esc: back · auto-refresh: 2s · q: quit";
+
+export function renderFooter(
+  renderer: CliRenderer,
+  mode: "list" | "detail" = "list",
+): BoxRenderable & { hotkeysText: TextRenderable } {
+  console.debug(`[tui:footer] rendering version=${VERSION} mode=${mode} hotkeys hint`);
   const box = new BoxRenderable(renderer, {
     id: "tui-footer",
     position: "absolute",
@@ -30,7 +36,7 @@ export function renderFooter(renderer: CliRenderer): BoxRenderable {
 
   const hotkeysText = new TextRenderable(renderer, {
     id: "tui-footer-text",
-    content: "Arrows/Enter: select · Mouse click: select · auto-refresh: 2s · q: quit",
+    content: mode === "list" ? HOTKEYS_LIST : HOTKEYS_DETAIL,
     fg: colors.muted,
   });
 
@@ -44,5 +50,6 @@ export function renderFooter(renderer: CliRenderer): BoxRenderable {
   box.add(leftSpacer);
   box.add(hotkeysText);
   box.add(rightSpacer);
-  return box;
+  (box as BoxRenderable & { hotkeysText: TextRenderable }).hotkeysText = hotkeysText;
+  return box as BoxRenderable & { hotkeysText: TextRenderable };
 }
