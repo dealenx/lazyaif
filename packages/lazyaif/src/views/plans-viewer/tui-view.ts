@@ -47,10 +47,11 @@ function buildOptions(plans: Plan[], statuses: PlanStatus[], nowMs: number) {
     const pct = formatPercent(st.pct).padStart(4, " ");
     const kindTag = plan.kind === "fast" ? "[fast]" : "[full]";
     const relativeTime = formatRelativeTime(plan.mtime, nowMs);
-    debug(`[tui:list] relative time for ${plan.fileName} = ${relativeTime}`);
+    const counts = `${st.done}/${st.total} done · ${st.inProgress ?? 0} in prog · ${st.notStarted ?? 0} todo`;
+    debug(`[tui:list] relative time for ${plan.fileName} = ${relativeTime} counts=${counts}`);
     return {
       name: `${kindTag} ${plan.fileName}`,
-      description: `${progress}  ${pct}  ${icon}  ·  ${relativeTime}`,
+      description: `${progress}  ${pct}  ${icon}  ·  ${counts}  ·  ${relativeTime}`,
       value: i,
     };
   });
@@ -61,6 +62,7 @@ export function renderPlanList(
   plans: Plan[],
   statuses: PlanStatus[],
   onSelect: (index: number) => void,
+  onOpen: (index: number) => void,
 ): SelectRenderable {
   console.debug(`[tui:plan-list] rendering plans count=${plans.length}`);
   const options = buildOptions(plans, statuses, Date.now());
@@ -87,7 +89,7 @@ export function renderPlanList(
 
   select.on(SelectRenderableEvents.ITEM_SELECTED, (index: number) => {
     console.debug(`[tui:plan-list] item selected (enter) index=${index}`);
-    onSelect(index);
+    onOpen(index);
   });
 
   select.on("mouse", (event: MouseEvent) => {
@@ -335,25 +337,45 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
   const DEBOUNCE_MS = 100;
 
   let select: SelectRenderable;
-  const planList = renderPlanList(renderer, plans, statuses, (index: number) => {
-    console.debug(`[tui:app] onSelect index=${index}`);
-    const clamped = clampSelection(index, plans.length);
-    if (clamped === null) {
-      console.warn(`[tui:app] selection index out of bounds: ${index}`);
-      return;
-    }
-    selectedIndex = clamped;
-    if (pendingSelectTimer) {
-      debug(`[tui:debounce] cancelled previous pending render`);
-      clearTimeout(pendingSelectTimer);
-    }
-    debug(`[tui:debounce] scheduled render for index=${clamped} in ${DEBOUNCE_MS}ms (mode=${viewMode})`);
-    pendingSelectTimer = setTimeout(() => {
-      pendingSelectTimer = null;
-      if (viewMode === "detail") enterDetailMode();
-      else console.debug(`[tui:debounce] skipping detail render in list mode for index=${clamped}`);
-    }, DEBOUNCE_MS);
-  });
+  const planList = renderPlanList(
+    renderer,
+    plans,
+    statuses,
+    (index: number) => {
+      console.debug(`[tui:app] onSelect index=${index}`);
+      const clamped = clampSelection(index, plans.length);
+      if (clamped === null) {
+        console.warn(`[tui:app] selection index out of bounds: ${index}`);
+        return;
+      }
+      selectedIndex = clamped;
+      if (pendingSelectTimer) {
+        debug(`[tui:debounce] cancelled previous pending render`);
+        clearTimeout(pendingSelectTimer);
+      }
+      debug(`[tui:debounce] scheduled render for index=${clamped} in ${DEBOUNCE_MS}ms (mode=${viewMode})`);
+      pendingSelectTimer = setTimeout(() => {
+        pendingSelectTimer = null;
+        if (viewMode === "detail") enterDetailMode();
+        else console.debug(`[tui:debounce] skipping detail render in list mode for index=${clamped}`);
+      }, DEBOUNCE_MS);
+    },
+    (index: number) => {
+      console.debug(`[tui:open] via=enter index=${index}`);
+      const clamped = clampSelection(index, plans.length);
+      if (clamped === null) {
+        console.warn(`[tui:open] selection index out of bounds: ${index}`);
+        return;
+      }
+      selectedIndex = clamped;
+      if (pendingSelectTimer) {
+        debug(`[tui:open] cancelled pending select timer (about to open)`);
+        clearTimeout(pendingSelectTimer);
+        pendingSelectTimer = null;
+      }
+      enterDetailMode();
+    },
+  );
   select = planList;
 
   bodyRow.add(planList);
@@ -383,6 +405,10 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
       return;
     }
     if (event.name === "escape") {
+      // Esc NEVER quits the program — it only navigates the
+      // Mode B → Mode A transition. process.exit(0) is wired
+      // to `q` only. Mode A Esc is a deliberate no-op so the
+      // user does not lose the focused list by accident.
       if (viewMode !== "detail") return;
       event.preventDefault();
       enterListMode();
