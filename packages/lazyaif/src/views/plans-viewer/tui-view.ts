@@ -260,6 +260,15 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
   let pendingMarkdownTimer: ReturnType<typeof setTimeout> | null = null;
   let listMounted = false;
   let onModeChange: ((mode: "list" | "detail") => void) | null = null;
+  // Forward declaration — the real `quitTui` is assigned below
+  // after the `destroy` callback has been defined. The placeholder
+  // is a no-op so the `q` keypress path is safe even if it ever
+  // fires before the assignment (it cannot in practice — the
+  // assignment happens synchronously before `renderer.keyInput.on`).
+  let quitTui: () => void = () => {
+    console.debug(`[tui:quit] phase=early-noop (destroy not yet assigned)`);
+  };
+  let quitInProgress = false;
 
   const enterDetailMode = () => {
     if (viewMode === "detail") {
@@ -409,15 +418,25 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
       // Mode B → Mode A transition. process.exit(0) is wired
       // to `q` only. Mode A Esc is a deliberate no-op so the
       // user does not lose the focused list by accident.
-      if (viewMode !== "detail") return;
+      //
+      // We always preventDefault() — even in the Mode A no-op
+      // branch — to keep the keystroke from leaking to opentui's
+      // KeyHandler / terminal. A bare `\x1B` is otherwise free to
+      // be interpreted as the start of an escape sequence
+      // (e.g. `?1049l` leave-alternate-screen) by some terminals,
+      // which would cause the program to look like it quit on Esc.
       event.preventDefault();
+      if (viewMode !== "detail") {
+        debug(`[tui:keypress] escape: no-op in list mode (prevented default)`);
+        return;
+      }
       enterListMode();
       return;
     }
     if (event.name === "q") {
       event.preventDefault();
       console.debug(`[tui:quit] exiting via q keypress`);
-      process.exit(0);
+      quitTui();
     }
   };
   renderer.keyInput.on("keypress", keypressHandler);
@@ -530,6 +549,24 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
 
   refreshState.dataInterval = setInterval(dataTick, DATA_REFRESH_MS);
   refreshState.labelInterval = setInterval(labelTick, LABEL_REFRESH_MS);
+
+  // Assign the real quitTui now that `destroy` is defined.
+  // The keypress handler (registered above) calls this for `q`.
+  // Idempotent: a second `q` while we are already tearing down
+  // is a no-op (the early return below).
+  quitTui = () => {
+    if (quitInProgress) {
+      console.debug(`[tui:quit] phase=already-in-progress, ignoring re-entry`);
+      return;
+    }
+    quitInProgress = true;
+    console.debug(`[tui:quit] phase=destroy-cb`);
+    try { destroy(); } catch (e) { console.warn(`[tui:quit] destroy-cb failed`, e); }
+    console.debug(`[tui:quit] phase=renderer-destroy`);
+    try { renderer.destroy(); } catch (e) { console.warn(`[tui:quit] renderer.destroy failed`, e); }
+    console.debug(`[tui:quit] phase=process-exit`);
+    process.exit(0);
+  };
 
   const destroy = () => {
     debug("[tui:shutdown] clearing refresh intervals + pending timers + keypress listener");
