@@ -193,7 +193,7 @@ function appendMarkdownDeferred(
         syntaxStyle: markdownSyntaxStyle,
         fg: colors.fg,
         bg: colors.bg,
-        conceal: false,
+        conceal: true,
         internalBlockMode: "top-level",
         tableOptions: { style: "grid", widthMode: "content", cellPaddingX: 1 },
         width: "100%",
