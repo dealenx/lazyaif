@@ -258,9 +258,9 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
     width: "100%",
   });
 
-  const showTasks = renderer.width >= RESPONSIVE_THRESHOLD;
+  let showTasks = renderer.width >= RESPONSIVE_THRESHOLD;
   console.debug(`[tui:responsive] showTasks=${showTasks} width=${renderer.width} threshold=${RESPONSIVE_THRESHOLD}`);
-  const planListWidth: number | "auto" | `${number}%` = showTasks ? "40%" : "100%";
+  let planListWidth: number | "auto" | `${number}%` = showTasks ? "40%" : "100%";
 
   let viewMode: "list" | "detail" = "list";
   let currentDetail: { id: string; renderable: ScrollBoxRenderable } | null = null;
@@ -469,6 +469,27 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
   root.add(footerBox);
   renderer.root.add(root);
 
+  const resizeHandler = () => {
+    const newShowTasks = renderer.width >= RESPONSIVE_THRESHOLD;
+    if (newShowTasks === showTasks) {
+      debug(`[tui:resize] width=${renderer.width} showTasks=${showTasks} (unchanged)`);
+      return;
+    }
+    showTasks = newShowTasks;
+    planListWidth = showTasks ? "40%" : "100%";
+    console.debug(`[tui:resize] showTasks=${showTasks} width=${renderer.width} threshold=${RESPONSIVE_THRESHOLD}`);
+    try { planList.width = planListWidth; } catch (e) { console.warn(`[tui:resize] planList.width set failed`, e); }
+    if (showTasks) {
+      currentTaskListPlanFileName = null;
+      if (viewMode === "list") rebuildTaskList();
+    } else {
+      removeTaskList();
+      currentTaskListPlanFileName = null;
+    }
+    renderer.requestRender();
+  };
+  renderer.on("resize", resizeHandler);
+
   const keypressHandler = (event: KeyEvent) => {
     if (event.repeated) return;
     console.debug(`[tui:keypress] name=${event.name} ctrl=${event.ctrl} meta=${event.meta} mode=${viewMode}`);
@@ -676,6 +697,7 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
       pendingMarkdownTimer = null;
     }
     removeTaskList();
+    try { renderer.off("resize", resizeHandler); } catch (e) { console.warn(`[tui:shutdown] renderer.off(resize) failed`, e); }
     try { renderer.keyInput.off("keypress", keypressHandler); } catch (e) { console.warn(`[tui:shutdown] keyInput.off failed`, e); }
   };
 

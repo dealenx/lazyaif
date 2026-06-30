@@ -80,4 +80,26 @@ describe("createPlansTuiApp (responsive)", () => {
     expect(title).toBeDefined();
     app.destroy();
   });
+
+  it("hides task-list panel on resize from large to small", async () => {
+    const r = await getRenderer(120, 24);
+    const root = tmpRoot!;
+    const app = await createPlansTuiApp(r, root);
+    const bodyRow = r.root.getRenderable("tui-root")?.getRenderable("tui-body-row");
+    expect(bodyRow!.getRenderable("task-list-0")).toBeDefined();
+    r.resize(80, 24);
+    expect(bodyRow!.getRenderable("task-list-0")).toBeUndefined();
+    app.destroy();
+  });
+
+  it("shows task-list panel on resize from small to large", async () => {
+    const r = await getRenderer(80, 24);
+    const root = tmpRoot!;
+    const app = await createPlansTuiApp(r, root);
+    const bodyRow = r.root.getRenderable("tui-root")?.getRenderable("tui-body-row");
+    expect(bodyRow!.getRenderable("task-list-0")).toBeUndefined();
+    r.resize(120, 24);
+    expect(bodyRow!.getRenderable("task-list-0")).toBeDefined();
+    app.destroy();
+  });
 });
