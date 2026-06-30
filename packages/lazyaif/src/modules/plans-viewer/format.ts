@@ -34,3 +34,22 @@ export function formatRelativeTime(fromMs: number, nowMs: number = Date.now()): 
   const d = Math.round(delta / 86_400_000);
   return d === 1 ? "1 day ago" : `${d} days ago`;
 }
+
+const TIME_UNITS: Array<[number, string]> = [
+  [86_400_000, "d"],
+  [3_600_000, "h"],
+  [60_000, "m"],
+  [1000, "s"],
+];
+
+export function formatRelativeTimeShort(fromMs: number, nowMs: number = Date.now()): string {
+  const delta = nowMs - fromMs;
+  if (delta < 1000) return "now";
+  for (const [ms, suffix] of TIME_UNITS) {
+    if (delta >= ms) {
+      const v = Math.round(delta / ms);
+      return `${v}${suffix}`;
+    }
+  }
+  return "now";
+}

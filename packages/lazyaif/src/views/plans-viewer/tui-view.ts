@@ -19,6 +19,7 @@ import {
   formatTaskProgress,
   formatPercent,
   formatRelativeTime,
+  formatRelativeTimeShort,
   clampSelection,
   sortByMtimeDesc,
 } from "../../modules/plans-viewer/index.js";
@@ -41,7 +42,11 @@ async function pathExists(p: string): Promise<boolean> {
   try { await access(p); return true; } catch { return false; }
 }
 
-function buildOptions(plans: Plan[], statuses: PlanStatus[], nowMs: number) {
+const WIDTH_FULL = 80;
+const WIDTH_COMPACT = 50;
+const WIDTH_TINY = 30;
+
+function buildOptions(plans: Plan[], statuses: PlanStatus[], nowMs: number, width = 100) {
   return plans.map((plan, i) => {
     const st = statuses[i];
     const icon = statusIcon(st.state);
@@ -49,11 +54,24 @@ function buildOptions(plans: Plan[], statuses: PlanStatus[], nowMs: number) {
     const pct = formatPercent(st.pct).padStart(4, " ");
     const kindTag = plan.kind === "fast" ? "[fast]" : "[full]";
     const relativeTime = formatRelativeTime(plan.mtime, nowMs);
+    const shortTime = formatRelativeTimeShort(plan.mtime, nowMs);
     const counts = `${st.done}/${st.total} done · ${st.inProgress ?? 0} in prog · ${st.notStarted ?? 0} todo`;
-    debug(`[tui:list] relative time for ${plan.fileName} = ${relativeTime} counts=${counts}`);
+    const countsShort = `${st.done}/${st.total} · ${st.inProgress ?? 0}p · ${st.notStarted ?? 0}t`;
+
+    let description: string;
+    if (width >= WIDTH_FULL) {
+      description = `${progress}  ${pct}  ${icon}  ·  ${counts}  ·  ${relativeTime}`;
+    } else if (width >= WIDTH_COMPACT) {
+      description = `${progress}  ${pct}  ${icon}  ·  ${countsShort}  ·  ${relativeTime}`;
+    } else if (width >= WIDTH_TINY) {
+      description = `${progress}  ${pct}  ${icon}  ·  ${countsShort}  ·  ${shortTime}`;
+    } else {
+      description = `${progress}  ${pct}  ${icon}  ${shortTime}`;
+    }
+    debug(`[tui:list] relative time for ${plan.fileName} = ${relativeTime} counts=${counts} width=${width}`);
     return {
       name: `${kindTag} ${plan.fileName}`,
-      description: `${progress}  ${pct}  ${icon}  ·  ${counts}  ·  ${relativeTime}`,
+      description,
       value: i,
     };
   });
@@ -66,9 +84,10 @@ export function renderPlanList(
   onSelect: (index: number) => void,
   onOpen: (index: number) => void,
   width: number | "auto" | `${number}%` = "40%",
+  listPixelWidth: number = 100,
 ): SelectRenderable {
-  console.debug(`[tui:plan-list] rendering plans count=${plans.length} width=${width}`);
-  const options = buildOptions(plans, statuses, Date.now());
+  console.debug(`[tui:plan-list] rendering plans count=${plans.length} width=${width} listPixelWidth=${listPixelWidth}`);
+  const options = buildOptions(plans, statuses, Date.now(), listPixelWidth);
 
   const select = new SelectRenderable(renderer, {
     id: "plan-list",
@@ -285,6 +304,7 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
   let showTasks = renderer.width >= RESPONSIVE_THRESHOLD;
   console.debug(`[tui:responsive] showTasks=${showTasks} width=${renderer.width} threshold=${RESPONSIVE_THRESHOLD}`);
   let planListWidth: number | "auto" | `${number}%` = showTasks ? "40%" : "100%";
+  const planListPixelWidth = () => Math.floor(renderer.width * (showTasks ? 0.4 : 1.0));
 
   let viewMode: "list" | "detail" = "list";
   let currentDetail: { id: string; renderable: ScrollBoxRenderable } | null = null;
@@ -474,6 +494,7 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
       enterDetailMode();
     },
     planListWidth,
+    planListPixelWidth(),
   );
   select = planList;
 
@@ -495,21 +516,21 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
 
   const resizeHandler = () => {
     const newShowTasks = renderer.width >= RESPONSIVE_THRESHOLD;
-    if (newShowTasks === showTasks) {
-      debug(`[tui:resize] width=${renderer.width} showTasks=${showTasks} (unchanged)`);
-      return;
-    }
+    const widthChanged = newShowTasks !== showTasks;
     showTasks = newShowTasks;
     planListWidth = showTasks ? "40%" : "100%";
     console.debug(`[tui:resize] showTasks=${showTasks} width=${renderer.width} threshold=${RESPONSIVE_THRESHOLD}`);
-    try { planList.width = planListWidth; } catch (e) { console.warn(`[tui:resize] planList.width set failed`, e); }
-    if (showTasks) {
-      currentTaskListPlanFileName = null;
-      if (viewMode === "list") rebuildTaskList();
-    } else {
-      removeTaskList();
-      currentTaskListPlanFileName = null;
+    if (widthChanged) {
+      try { planList.width = planListWidth; } catch (e) { console.warn(`[tui:resize] planList.width set failed`, e); }
+      if (showTasks) {
+        currentTaskListPlanFileName = null;
+        if (viewMode === "list") rebuildTaskList();
+      } else {
+        removeTaskList();
+        currentTaskListPlanFileName = null;
+      }
     }
+    select.options = buildOptions(plans, statuses, Date.now(), planListPixelWidth());
     renderer.requestRender();
   };
   renderer.on("resize", resizeHandler);
@@ -631,7 +652,7 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
       statuses = newStatuses;
       selectedIndex = newIndex;
 
-      select.options = buildOptions(plans, statuses, Date.now());
+      select.options = buildOptions(plans, statuses, Date.now(), planListPixelWidth());
       if (selectionChanged) {
         select.setSelectedIndex(newIndex);
         if (viewMode === "detail") enterDetailMode();
@@ -654,7 +675,7 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
     try {
       const now = Date.now();
       const oldOptions = select.options;
-      const newOptions = buildOptions(plans, statuses, now);
+      const newOptions = buildOptions(plans, statuses, now, planListPixelWidth());
       let changed = 0;
       for (let i = 0; i < oldOptions.length && i < newOptions.length; i++) {
         if (oldOptions[i].description !== newOptions[i].description) changed++;

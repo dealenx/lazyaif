@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { formatRelativeTime } from "../../../src/modules/plans-viewer/format.js";
+import { formatRelativeTime, formatRelativeTimeShort } from "../../../src/modules/plans-viewer/format.js";
 
 const NOW = 1_000_000_000_000;
 
@@ -41,5 +41,36 @@ describe("formatRelativeTime", () => {
     expect(formatRelativeTime(NOW - 60_000, NOW)).toBe("1 minute ago");
     expect(formatRelativeTime(NOW - 3_600_000, NOW)).toBe("1 hour ago");
     expect(formatRelativeTime(NOW - 86_400_000, NOW)).toBe("1 day ago");
+  });
+});
+
+describe("formatRelativeTimeShort", () => {
+  it("returns 'now' for delta < 1s", () => {
+    expect(formatRelativeTimeShort(NOW, NOW)).toBe("now");
+    expect(formatRelativeTimeShort(NOW - 500, NOW)).toBe("now");
+  });
+
+  it("returns 'now' for negative delta (clock skew)", () => {
+    expect(formatRelativeTimeShort(NOW + 5000, NOW)).toBe("now");
+  });
+
+  it("formats seconds with 's' suffix", () => {
+    expect(formatRelativeTimeShort(NOW - 15_000, NOW)).toBe("15s");
+    expect(formatRelativeTimeShort(NOW - 59_000, NOW)).toBe("59s");
+  });
+
+  it("formats minutes with 'm' suffix", () => {
+    expect(formatRelativeTimeShort(NOW - 60_000, NOW)).toBe("1m");
+    expect(formatRelativeTimeShort(NOW - 125_000, NOW)).toBe("2m");
+  });
+
+  it("formats hours with 'h' suffix", () => {
+    expect(formatRelativeTimeShort(NOW - 3_600_000, NOW)).toBe("1h");
+    expect(formatRelativeTimeShort(NOW - 7_200_000, NOW)).toBe("2h");
+  });
+
+  it("formats days with 'd' suffix", () => {
+    expect(formatRelativeTimeShort(NOW - 86_400_000, NOW)).toBe("1d");
+    expect(formatRelativeTimeShort(NOW - 172_800_000, NOW)).toBe("2d");
   });
 });
