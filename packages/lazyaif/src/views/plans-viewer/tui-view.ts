@@ -286,6 +286,52 @@ export function renderTaskDetail(
   return scroll;
 }
 
+export function renderBackBar(
+  renderer: CliRenderer,
+  onBack: () => void,
+): BoxRenderable {
+  debug(`[tui:back-bar] creating back bar`);
+
+  const bar = new BoxRenderable(renderer, {
+    id: "detail-back-bar",
+    width: "100%",
+    height: 1,
+    backgroundColor: colors.bgAlt,
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 0,
+  });
+
+  const text = new TextRenderable(renderer, {
+    id: "detail-back-bar-text",
+    content: t`${fg(colors.accent)("\u2190 Back")}  ${fg(colors.muted)("(double-click to return to list)")}`,
+    fg: colors.fg,
+  });
+  bar.add(text);
+
+  let lastClickTime = 0;
+  const DOUBLE_CLICK_MS = 300;
+
+  bar.onMouseDown = (event: MouseEvent) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const now = Date.now();
+    const elapsed = now - lastClickTime;
+    debug(`[tui:back-bar] mouse down button=${event.button} elapsed=${elapsed}ms`);
+    if (elapsed < DOUBLE_CLICK_MS) {
+      debug(`[tui:back-bar] double click detected -> calling onBack`);
+      lastClickTime = 0;
+      onBack();
+    } else {
+      lastClickTime = now;
+    }
+  };
+
+  debug(`[tui:back-bar] created id=detail-back-bar`);
+  return bar;
+}
+
 export function renderDeleteConfirm(
   renderer: CliRenderer,
   plan: Plan,
@@ -460,7 +506,7 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
   const planListPixelWidth = () => Math.floor(renderer.width * (showTasks ? 0.4 : 1.0));
 
   let viewMode: "list" | "detail" = "list";
-  let currentDetail: { id: string; renderable: ScrollBoxRenderable } | null = null;
+  let currentDetail: { id: string; renderable: BoxRenderable; detailId: string; detailScroll: ScrollBoxRenderable } | null = null;
   let currentTaskList: { id: string; renderable: ScrollBoxRenderable } | null = null;
   let currentTaskListPlanFileName: string | null = null;
   let pendingMarkdownTimer: ReturnType<typeof setTimeout> | null = null;
@@ -621,23 +667,39 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
       pendingMarkdownTimer = null;
     }
     if (currentDetail) {
-      console.debug(`[tui:mode] removing previous detail id=${currentDetail.id}`);
+      console.debug(`[tui:mode] removing previous detail container id=${currentDetail.id}`);
       try { bodyRow.remove(currentDetail.id); } catch (e) { console.warn(`[tui:mode] bodyRow.remove(detail) failed`, e); }
       try { currentDetail.renderable.destroy(); } catch { /* noop */ }
       currentDetail = null;
     }
     const detailId = `plan-detail-${selectedIndex}`;
     const detail = renderTaskDetail(renderer, plan, statuses[selectedIndex], detailId, "100%");
-    bodyRow.add(detail);
-    currentDetail = { id: detailId, renderable: detail };
-    console.debug(`[tui:mode] mounted detail id=${detailId} plan=${plan.fileName}`);
+    const containerId = `detail-container-${selectedIndex}`;
+    debug(`[tui:mode] creating detailContainer id=${containerId} for plan=${plan.fileName}`);
+    const detailContainer = new BoxRenderable(renderer, {
+      id: containerId,
+      flexDirection: "column",
+      width: "100%",
+      height: "100%",
+    });
+    const backBar = renderBackBar(renderer, () => {
+      debug(`[tui:back-bar] onBack callback -> enterListMode`);
+      enterListMode();
+    });
+    detailContainer.add(backBar);
+    debug(`[tui:mode] added backBar to detailContainer id=${containerId}`);
+    detailContainer.add(detail);
+    debug(`[tui:mode] added detail (scroll) to detailContainer id=${containerId}`);
+    bodyRow.add(detailContainer);
+    currentDetail = { id: containerId, renderable: detailContainer, detailId, detailScroll: detail };
+    console.debug(`[tui:mode] mounted detailContainer id=${containerId} detailId=${detailId} plan=${plan.fileName}`);
 
     pendingMarkdownTimer = appendMarkdownDeferred(
       renderer,
       detail,
       plan,
       `${detailId}-md`,
-      () => currentDetail?.id !== detailId,
+      () => currentDetail?.detailId !== detailId,
     );
     try { detail.focus(); } catch (e) { console.warn(`[tui:mode] detail.focus() failed`, e); }
     if (onModeChange) onModeChange(viewMode);
@@ -657,6 +719,7 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
       pendingMarkdownTimer = null;
     }
     if (currentDetail) {
+      debug(`[tui:mode] enterListMode: removing detailContainer id=${currentDetail.id}`);
       try { bodyRow.remove(currentDetail.id); } catch (e) { console.warn(`[tui:mode] bodyRow.remove(detail) failed`, e); }
       try { currentDetail.renderable.destroy(); } catch { /* noop */ }
       currentDetail = null;
@@ -701,19 +764,34 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
     try { bodyRow.remove(currentDetail.id); } catch (e) { console.warn(`[tui:refresh] refreshDetail: bodyRow.remove(oldDetail) failed`, e); }
     try { currentDetail.renderable.destroy(); } catch { /* noop */ }
     currentDetail = null;
-    debug(`[tui:refresh] refreshDetail: removed old detail id=${oldId}`);
+    debug(`[tui:refresh] refreshDetail: removed old detailContainer id=${oldId}`);
     detailRefreshCounter++;
     const detailId = `plan-detail-${selectedIndex}-r${detailRefreshCounter}`;
     const detail = renderTaskDetail(renderer, plan, statuses[selectedIndex], detailId, "100%");
-    bodyRow.add(detail);
-    currentDetail = { id: detailId, renderable: detail };
-    debug(`[tui:refresh] refreshDetail: mounted new detail id=${detailId} plan=${plan.fileName}`);
+    const containerId = `detail-container-${selectedIndex}-r${detailRefreshCounter}`;
+    debug(`[tui:refresh] refreshDetail: creating detailContainer id=${containerId}`);
+    const detailContainer = new BoxRenderable(renderer, {
+      id: containerId,
+      flexDirection: "column",
+      width: "100%",
+      height: "100%",
+    });
+    const backBar = renderBackBar(renderer, () => {
+      debug(`[tui:back-bar] onBack callback (refresh) -> enterListMode`);
+      enterListMode();
+    });
+    detailContainer.add(backBar);
+    detailContainer.add(detail);
+    debug(`[tui:refresh] refreshDetail: added backBar + detail to detailContainer id=${containerId}`);
+    bodyRow.add(detailContainer);
+    currentDetail = { id: containerId, renderable: detailContainer, detailId, detailScroll: detail };
+    debug(`[tui:refresh] refreshDetail: mounted new detailContainer id=${containerId} detailId=${detailId} plan=${plan.fileName}`);
     pendingMarkdownTimer = appendMarkdownDeferred(
       renderer,
       detail,
       plan,
       `${detailId}-md`,
-      () => currentDetail?.id !== detailId,
+      () => currentDetail?.detailId !== detailId,
     );
     try { detail.focus(); } catch (e) { console.warn(`[tui:refresh] refreshDetail: detail.focus() failed`, e); }
     renderer.requestRender();
