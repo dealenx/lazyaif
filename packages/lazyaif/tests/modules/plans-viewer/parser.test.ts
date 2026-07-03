@@ -130,4 +130,66 @@ describe("parsePlanFile", () => {
     expect(plan.settings.testing).toBe(true);
     expect(plan.settings.logging).toBe("standard");
   });
+
+  it("parses bold-colon format: **Task N**: title (title outside bold)", async () => {
+    const content = await fixture("bold-colon-plan.md");
+    const plan = parsePlanFile(content, ".ai-factory/plans/bold-colon-plan.md");
+    expect(plan.title).toBe("Reset LiteLLM Key Spend on Tariff Change");
+    expect(plan.branch).toBe("ai-1780453589");
+    expect(plan.created).toBe("2026-06-17");
+    expect(plan.settings.testing).toBe(true);
+    expect(plan.settings.logging).toBe("verbose");
+    expect(plan.settings.docs).toBe(false);
+    expect(plan.tasks.length).toBe(4);
+    expect(plan.tasks[0].id).toBe(1);
+    expect(plan.tasks[0].done).toBe(true);
+    expect(plan.tasks[0].title).toBe("Add `resetKeySpend()` call in `LitellmKeyService::updateExistingKey()`");
+    expect(plan.phases.length).toBe(3);
+    expect(plan.phases[0].name).toBe("Core Fix");
+  });
+
+  it("parses heading-task format: #### [x] Task N: title", async () => {
+    const content = await fixture("heading-tasks-plan.md");
+    const plan = parsePlanFile(content, ".ai-factory/plans/heading-tasks-plan.md");
+    expect(plan.title).toBe("Визуальный редактор темпо (Tempo Builder)");
+    expect(plan.branch).toBe("— (full mode, no git switch)");
+    expect(plan.created).toBe("2026-06-10");
+    expect(plan.mode).toBe("full, no git branch");
+    expect(plan.tasks.length).toBe(6);
+    expect(plan.tasks[0].id).toBe(1);
+    expect(plan.tasks[0].done).toBe(true);
+    expect(plan.tasks[0].title).toBe("Создать компонент TempoBuilder");
+    expect(plan.tasks[1].id).toBe(2);
+    expect(plan.tasks[1].done).toBe(false);
+    expect(plan.tasks[1].title).toBe("Создать отдельную страницу создания темпо (вместо диалога)");
+    expect(plan.phases.length).toBe(3);
+    expect(plan.phases[0].name).toBe("Компонент TempoBuilder (UI)");
+    expect(plan.phases[1].name).toBe("Редактирование существующего темпо");
+    expect(plan.phases[2].name).toBe("Полировка");
+  });
+
+  it("parses **Branch:** without leading dash", () => {
+    const content = [
+      "# Plan: Test plan",
+      "**Branch:** my-branch",
+      "**Created:** 2026-07-03",
+      "**Mode:** full, no git branch",
+      "",
+      "## Settings",
+      "",
+      "- **Testing:** yes",
+      "- **Logging:** standard",
+      "",
+      "## Tasks",
+      "",
+      "### Phase 1: Setup",
+      "#### [x] Task 1: Do thing",
+    ].join("\n");
+    const plan = parsePlanFile(content, ".ai-factory/plans/test.md");
+    expect(plan.branch).toBe("my-branch");
+    expect(plan.created).toBe("2026-07-03");
+    expect(plan.mode).toBe("full, no git branch");
+    expect(plan.tasks.length).toBe(1);
+    expect(plan.tasks[0].title).toBe("Do thing");
+  });
 });

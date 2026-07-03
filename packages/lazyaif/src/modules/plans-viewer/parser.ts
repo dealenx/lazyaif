@@ -24,6 +24,11 @@ function warn(msg: string): void {
 const PHASE_RE = /^###\s+Phase\s+\d+:\s*(.+)$/;
 const TASK_RE = /^-\s+\[([ xX])\]\s+Task\s+(\d+):\s*(.+)$/;
 const TASK_BOLD_RE = /^-\s+\[([ xX])\]\s+\*\*Task\s+(\d+):\s*(.+)\*\*$/;
+const TASK_BOLD_COLON_RE = /^-\s+\[([ xX])\]\s+\*\*Task\s+(\d+)\*\*:\s*(.+)$/;
+const TASK_HEADING_RE = /^#{4,6}\s+\[([ xX])\]\s+Task\s+(\d+):\s*(.+)$/;
+const TASK_HEADING_BOLD_RE = /^#{4,6}\s+\[([ xX])\]\s+\*\*Task\s+(\d+):\s*(.+)\*\*$/;
+const TASK_HEADING_BOLD_COLON_RE = /^#{4,6}\s+\[([ xX])\]\s+\*\*Task\s+(\d+)\*\*:\s*(.+)$/;
+const TASK_HEADING_NOBOX_RE = /^#{4,6}\s+Task\s+(\d+):\s*(.+)$/;
 const DEPENDS_RE = /\(depends\s+on\s+([\d\s,]+)\)/i;
 const SETTINGS_TESTING_RE = /^-\s*Testing:\s*(yes|no)/i;
 const SETTINGS_LOGGING_RE = /^-\s*Logging:\s*(verbose|standard|minimal)/i;
@@ -32,11 +37,19 @@ const SETTINGS_TESTING_BOLD_RE = /^-\s*\*\*Testing:\*\*\s*(yes|no)/i;
 const SETTINGS_LOGGING_BOLD_RE = /^-\s*\*\*Logging:\*\*\s*(verbose|standard|minimal)/i;
 const SETTINGS_DOCS_BOLD_RE = /^-\s*\*\*Docs:\*\*\s*(yes|no|warn-only)/i;
 const STATUS_BOLD_RE = /^-\s*\*\*Status:\*\*\s*(.+)$/i;
+const MODE_BOLD_RE = /^\*\*Mode:\*\*\s*(.+)$/i;
+const SEPARATOR_RE = /^-{3,}$/;
 
 function parseDependsOn(title: string): number[] {
   const m = title.match(DEPENDS_RE);
   if (!m) return [];
   return m[1].split(",").map((s) => parseInt(s.trim(), 10)).filter((n) => !isNaN(n));
+}
+
+function stripTrailingDesc(value: string): string {
+  const trimmed = value.trim();
+  if (trimmed.startsWith("—") || trimmed.startsWith("--")) return trimmed;
+  return trimmed.split(/\s+—\s+|\s+--\s+/)[0].trim();
 }
 
 function stripDependsFromTitle(title: string): string {
@@ -57,6 +70,7 @@ export function parsePlanFile(content: string, relativePath: string): Omit<Plan,
   let branch = "none";
   let created = "";
   let status: string | undefined;
+  let mode: string | undefined;
   const settings: PlanSettings = { ...DEFAULT_SETTINGS };
   const phases: Phase[] = [];
   const allTasks: Task[] = [];
@@ -81,19 +95,27 @@ export function parsePlanFile(content: string, relativePath: string): Omit<Plan,
       inTaskBody = false;
       continue;
     }
-    const branchMatch = line.match(/^Branch:\s*(.+)$/i) ?? line.match(/^-\s*\*\*Branch:\*\*\s*(.+)$/i);
+    const branchMatch = line.match(/^Branch:\s*(.+)$/i) ?? line.match(/^-\s*\*\*Branch:\*\*\s*(.+)$/i) ?? line.match(/^\*\*Branch:\*\*\s*(.+)$/i);
     if (branchMatch) {
-      branch = branchMatch[1].split(/\s+—\s+|\s+--\s+/)[0].trim();
+      branch = stripTrailingDesc(branchMatch[1]);
       continue;
     }
-    const createdMatch = line.match(/^Created:\s*(.+)$/i) ?? line.match(/^-\s*\*\*Created:\*\*\s*(.+)$/i);
+    const createdMatch = line.match(/^Created:\s*(.+)$/i) ?? line.match(/^-\s*\*\*Created:\*\*\s*(.+)$/i) ?? line.match(/^\*\*Created:\*\*\s*(.+)$/i);
     if (createdMatch) {
-      created = createdMatch[1].split(/\s+—\s+|\s+--\s+/)[0].trim();
+      created = stripTrailingDesc(createdMatch[1]);
       continue;
     }
     const statusMatch = line.match(STATUS_BOLD_RE);
     if (statusMatch) {
       status = statusMatch[1].trim();
+      continue;
+    }
+    const modeMatch = line.match(MODE_BOLD_RE);
+    if (modeMatch) {
+      mode = modeMatch[1].trim();
+      continue;
+    }
+    if (SEPARATOR_RE.test(line.trim())) {
       continue;
     }
     if (/^##\s+Settings/i.test(line)) {
@@ -137,7 +159,7 @@ export function parsePlanFile(content: string, relativePath: string): Omit<Plan,
       continue;
     }
 
-    const taskMatch = line.match(TASK_BOLD_RE) ?? line.match(TASK_RE);
+    const taskMatch = line.match(TASK_BOLD_RE) ?? line.match(TASK_BOLD_COLON_RE) ?? line.match(TASK_RE) ?? line.match(TASK_HEADING_BOLD_RE) ?? line.match(TASK_HEADING_BOLD_COLON_RE) ?? line.match(TASK_HEADING_RE);
     if (taskMatch) {
       if (currentTask) {
         allTasks.push(currentTask);
@@ -150,6 +172,27 @@ export function parsePlanFile(content: string, relativePath: string): Omit<Plan,
         id,
         title: taskTitle,
         done: taskMatch[1].toLowerCase() === "x",
+        phase: currentPhase?.name ?? "",
+        description: "",
+        dependsOn,
+      };
+      inTaskBody = true;
+      continue;
+    }
+
+    const taskHeadingNoBox = line.match(TASK_HEADING_NOBOX_RE);
+    if (taskHeadingNoBox) {
+      if (currentTask) {
+        allTasks.push(currentTask);
+        if (currentPhase) currentPhase.tasks.push(currentTask);
+      }
+      const id = parseInt(taskHeadingNoBox[1], 10);
+      const dependsOn = parseDependsOn(taskHeadingNoBox[2]);
+      const taskTitle = stripDependsFromTitle(taskHeadingNoBox[2]);
+      currentTask = {
+        id,
+        title: taskTitle,
+        done: false,
         phase: currentPhase?.name ?? "",
         description: "",
         dependsOn,
@@ -177,5 +220,5 @@ export function parsePlanFile(content: string, relativePath: string): Omit<Plan,
 
   debug(`[parser] found phases=${phases.length} tasks=${allTasks.length} status=${status ?? "none"}`);
 
-  return { kind, path: relativePath, fileName, title, branch, created, status, settings, phases, tasks: allTasks, rawMarkdown: content };
+  return { kind, path: relativePath, fileName, title, branch, created, status, mode, settings, phases, tasks: allTasks, rawMarkdown: content };
 }

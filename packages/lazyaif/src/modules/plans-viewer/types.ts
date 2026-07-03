@@ -39,6 +39,8 @@ export interface Plan {
   created: string;
   /** Plan status from `- **Status:** planning` (new format only). */
   status?: string;
+  /** Plan mode from `**Mode:** full` (new format only). */
+  mode?: string;
   settings: PlanSettings;
   phases: Phase[];
   tasks: Task[];
