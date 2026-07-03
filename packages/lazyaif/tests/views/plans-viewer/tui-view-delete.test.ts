@@ -48,41 +48,50 @@ const mockFastPlan: Plan = {
 describe("renderDeleteConfirm", () => {
   it("creates overlay with correct id", async () => {
     const r = await getRenderer();
-    const overlay = renderDeleteConfirm(r, mockPlan);
+    const { overlay } = renderDeleteConfirm(r, mockPlan);
     expect(overlay.id).toBe("delete-confirm-overlay");
   });
 
   it("creates dialog with border and correct id", async () => {
     const r = await getRenderer();
-    const overlay = renderDeleteConfirm(r, mockPlan);
+    const { overlay } = renderDeleteConfirm(r, mockPlan);
     const dialog = overlay.findDescendantById("delete-confirm-dialog");
     expect(dialog).toBeDefined();
   });
 
   it("creates title text renderable", async () => {
     const r = await getRenderer();
-    const overlay = renderDeleteConfirm(r, mockPlan);
+    const { overlay } = renderDeleteConfirm(r, mockPlan);
     const title = overlay.findDescendantById("delete-confirm-title");
     expect(title).toBeDefined();
   });
 
   it("creates body text renderable with fileName", async () => {
     const r = await getRenderer();
-    const overlay = renderDeleteConfirm(r, mockPlan);
+    const { overlay } = renderDeleteConfirm(r, mockPlan);
     const body = overlay.findDescendantById("delete-confirm-body");
     expect(body).toBeDefined();
   });
 
-  it("creates hint text renderable", async () => {
+  it("creates select with two options (Delete, Cancel)", async () => {
     const r = await getRenderer();
-    const overlay = renderDeleteConfirm(r, mockPlan);
-    const hint = overlay.findDescendantById("delete-confirm-hint");
-    expect(hint).toBeDefined();
+    const { overlay, select } = renderDeleteConfirm(r, mockPlan);
+    const found = overlay.findDescendantById("delete-confirm-select");
+    expect(found).toBeDefined();
+    expect(select.options.length).toBe(2);
+    expect(select.options[0].value).toBe("delete");
+    expect(select.options[1].value).toBe("cancel");
+  });
+
+  it("defaults selection to Cancel (index 1) for safety", async () => {
+    const r = await getRenderer();
+    const { select } = renderDeleteConfirm(r, mockPlan);
+    expect(select.getSelectedIndex()).toBe(1);
   });
 
   it("creates overlay for fast plan with [fast] tag", async () => {
     const r = await getRenderer();
-    const overlay = renderDeleteConfirm(r, mockFastPlan);
+    const { overlay } = renderDeleteConfirm(r, mockFastPlan);
     expect(overlay.id).toBe("delete-confirm-overlay");
     const body = overlay.findDescendantById("delete-confirm-body");
     expect(body).toBeDefined();

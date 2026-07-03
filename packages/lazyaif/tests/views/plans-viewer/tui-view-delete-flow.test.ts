@@ -70,7 +70,7 @@ describe("createPlansTuiApp delete flow", () => {
     app.destroy();
   });
 
-  it("hides overlay when n key is pressed", async () => {
+  it("hides overlay when escape is pressed", async () => {
     const r = await getRenderer();
     const root = tmpRoot!;
     const app = await createPlansTuiApp(r, root);
@@ -78,13 +78,13 @@ describe("createPlansTuiApp delete flow", () => {
     emitKey(r, "d", "d");
     expect(r.root.findDescendantById("delete-confirm-overlay")).toBeDefined();
 
-    emitKey(r, "n", "n");
+    emitKey(r, "escape", "\x1b");
     expect(r.root.findDescendantById("delete-confirm-overlay")).toBeUndefined();
 
     app.destroy();
   });
 
-  it("deletes the plan file when y key is pressed", async () => {
+  it("deletes the plan file when Delete is selected via arrow up + enter", async () => {
     const r = await getRenderer();
     const root = tmpRoot!;
     const app = await createPlansTuiApp(r, root);
@@ -94,9 +94,11 @@ describe("createPlansTuiApp delete flow", () => {
     expect(await pathExists(targetFile)).toBe(true);
 
     emitKey(r, "d", "d");
-    emitKey(r, "y", "y");
+    // Default selection is Cancel (index 1), so navigate up to Delete (index 0)
+    emitKey(r, "up", "\x1b[A");
+    emitKey(r, "return", "\r");
 
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    await new Promise((resolve) => setTimeout(resolve, 1000));
 
     expect(await pathExists(targetFile)).toBe(false);
 
@@ -111,10 +113,29 @@ describe("createPlansTuiApp delete flow", () => {
     emitKey(r, "d", "d");
     expect(r.root.findDescendantById("delete-confirm-overlay")).toBeDefined();
 
-    emitKey(r, "y", "y");
+    emitKey(r, "up", "\x1b[A");
+    emitKey(r, "return", "\r");
 
     await new Promise((resolve) => setTimeout(resolve, 300));
 
+    expect(r.root.findDescendantById("delete-confirm-overlay")).toBeUndefined();
+
+    app.destroy();
+  });
+
+  it("does not delete file when Cancel is selected (default, enter)", async () => {
+    const r = await getRenderer();
+    const root = tmpRoot!;
+    const app = await createPlansTuiApp(r, root);
+
+    const plansDir = join(root, ".ai-factory", "plans");
+    const targetFile = join(plansDir, "feature-test.md");
+
+    emitKey(r, "d", "d");
+    // Default selection is Cancel (index 1), so just press enter
+    emitKey(r, "return", "\r");
+
+    expect(await pathExists(targetFile)).toBe(true);
     expect(r.root.findDescendantById("delete-confirm-overlay")).toBeUndefined();
 
     app.destroy();

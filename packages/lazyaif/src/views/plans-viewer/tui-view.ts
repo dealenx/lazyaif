@@ -289,7 +289,7 @@ export function renderTaskDetail(
 export function renderDeleteConfirm(
   renderer: CliRenderer,
   plan: Plan,
-): BoxRenderable {
+): { overlay: BoxRenderable; select: SelectRenderable } {
   debug(`[tui:delete-confirm] creating overlay for plan=${plan.fileName}`);
 
   const overlay = new BoxRenderable(renderer, {
@@ -309,7 +309,7 @@ export function renderDeleteConfirm(
   const dialog = new BoxRenderable(renderer, {
     id: "delete-confirm-dialog",
     width: 50,
-    height: 7,
+    height: 9,
     border: true,
     borderStyle: "single",
     borderColor: colors.notStarted,
@@ -335,16 +335,37 @@ export function renderDeleteConfirm(
   });
   dialog.add(bodyText);
 
-  const hintText = new TextRenderable(renderer, {
-    id: "delete-confirm-hint",
-    content: t`${fg(colors.muted)("y: confirm \u00B7 Esc/n: cancel")}`,
+  const spacerText = new TextRenderable(renderer, {
+    id: "delete-confirm-spacer",
+    content: " ",
     fg: colors.muted,
   });
-  dialog.add(hintText);
+  dialog.add(spacerText);
+
+  const select = new SelectRenderable(renderer, {
+    id: "delete-confirm-select",
+    width: 30,
+    height: 3,
+    options: [
+      { name: "\u2716  Delete", description: "Permanently remove the plan file", value: "delete" },
+      { name: "\u2714  Cancel", description: "Keep the plan, dismiss this dialog", value: "cancel" },
+    ],
+    selectedIndex: 1,
+    backgroundColor: colors.bgAlt,
+    textColor: colors.fg,
+    selectedBackgroundColor: colors.selected,
+    selectedTextColor: "#FFFFFF",
+    descriptionColor: colors.muted,
+    showDescription: false,
+    wrapSelection: true,
+    itemSpacing: 0,
+  });
+  dialog.add(select);
 
   overlay.add(dialog);
   debug(`[tui:delete-confirm] overlay created id=delete-confirm-overlay plan=${plan.fileName}`);
-  return overlay;
+  select.focus();
+  return { overlay, select };
 }
 
 function appendMarkdownDeferred(
@@ -446,6 +467,8 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
   let listMounted = false;
   let taskListMounted = false;
   let confirmOverlay: BoxRenderable | null = null;
+  let confirmSelect: SelectRenderable | null = null;
+  let confirmSelectIndex = 1;
   let emptyStateMounted = false;
   let onModeChange: ((mode: "list" | "detail") => void) | null = null;
   // Forward declaration — the real `quitTui` is assigned below
@@ -512,8 +535,19 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
       return;
     }
     debug(`[tui:delete-confirm] showing confirm overlay for plan=${plan.fileName} index=${selectedIndex}`);
-    confirmOverlay = renderDeleteConfirm(renderer, plan);
+    const result = renderDeleteConfirm(renderer, plan);
+    confirmOverlay = result.overlay;
+    confirmSelect = result.select;
+    confirmSelectIndex = 1;
     root.add(confirmOverlay);
+    confirmSelect.on(SelectRenderableEvents.ITEM_SELECTED, (index: number) => {
+      debug(`[tui:delete-confirm] select item selected index=${index}`);
+      if (index === 0) {
+        void confirmDelete();
+      } else {
+        hideDeleteConfirm();
+      }
+    });
     footerBox.hotkeysText.content = HOTKEYS_CONFIRM;
     debug(`[tui:footer] hotkeys updated to confirm mode`);
     renderer.requestRender();
@@ -528,6 +562,7 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
     try { root.remove(confirmOverlay.id); } catch (e) { console.warn(`[tui:delete-confirm] root.remove failed`, e); }
     try { confirmOverlay.destroyRecursively(); } catch { /* noop */ }
     confirmOverlay = null;
+    confirmSelect = null;
     footerBox.hotkeysText.content = viewMode === "list" ? HOTKEYS_LIST : HOTKEYS_DETAIL;
     debug(`[tui:footer] hotkeys restored to ${viewMode} mode`);
     renderer.requestRender();
@@ -777,14 +812,30 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
     if (confirmOverlay) {
       event.preventDefault();
       debug(`[tui:keypress] overlay active, intercepting key=${event.name}`);
-      if (event.name === "y") {
-        debug(`[tui:keypress] y: confirming delete`);
-        void confirmDelete();
+      if (event.name === "escape") {
+        debug(`[tui:keypress] escape: cancelling delete`);
+        hideDeleteConfirm();
         return;
       }
-      if (event.name === "n" || event.name === "escape") {
-        debug(`[tui:keypress] ${event.name}: cancelling delete`);
-        hideDeleteConfirm();
+      if (event.name === "return" || event.name === "enter") {
+        debug(`[tui:keypress] enter: confirming selection index=${confirmSelectIndex}`);
+        if (confirmSelectIndex === 0) {
+          void confirmDelete();
+        } else {
+          hideDeleteConfirm();
+        }
+        return;
+      }
+      if (event.name === "up" || event.name === "left") {
+        debug(`[tui:keypress] ${event.name}: moving selection up`);
+        confirmSelectIndex = confirmSelectIndex === 0 ? 1 : 0;
+        if (confirmSelect) confirmSelect.setSelectedIndex(confirmSelectIndex);
+        return;
+      }
+      if (event.name === "down" || event.name === "right") {
+        debug(`[tui:keypress] ${event.name}: moving selection down`);
+        confirmSelectIndex = confirmSelectIndex === 0 ? 1 : 0;
+        if (confirmSelect) confirmSelect.setSelectedIndex(confirmSelectIndex);
         return;
       }
       debug(`[tui:keypress] overlay active, ignoring key=${event.name}`);
@@ -1054,6 +1105,7 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
       try { root.remove(confirmOverlay.id); } catch { /* noop */ }
       try { confirmOverlay.destroyRecursively(); } catch { /* noop */ }
       confirmOverlay = null;
+      confirmSelect = null;
     }
     try { renderer.off("resize", resizeHandler); } catch (e) { console.warn(`[tui:shutdown] renderer.off(resize) failed`, e); }
     try { renderer.keyInput.off("keypress", keypressHandler); } catch (e) { console.warn(`[tui:shutdown] keyInput.off failed`, e); }
