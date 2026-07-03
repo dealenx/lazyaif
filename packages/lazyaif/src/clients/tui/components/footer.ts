@@ -3,8 +3,9 @@ import type { CliRenderer } from "@opentui/core";
 import { colors } from "./theme.js";
 import { VERSION } from "../../../shared/version.js";
 
-export const HOTKEYS_LIST = "Arrows/Wheel: navigate · Enter/Tab/Dbl-click: open · Click: select · Tasks panel: auto (width≥100) · auto-refresh: 2s · q: quit";
+export const HOTKEYS_LIST = "Arrows/Wheel: navigate · Enter/Tab/Dbl-click: open · Click: select · d: delete · Tasks panel: auto (width≥100) · auto-refresh: 2s · q: quit";
 export const HOTKEYS_DETAIL = "Arrows/PageUp/PageDown: scroll · Tab/Esc: back · auto-refresh: 2s · q: quit";
+export const HOTKEYS_CONFIRM = "y: confirm delete · Esc/n: cancel";
 
 export function renderFooter(
   renderer: CliRenderer,

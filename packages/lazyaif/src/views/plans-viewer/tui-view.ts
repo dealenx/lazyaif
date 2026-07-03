@@ -24,9 +24,9 @@ import {
   sortByMtimeDesc,
 } from "../../modules/plans-viewer/index.js";
 import type { Plan, PlanStatus } from "../../modules/plans-viewer/types.js";
-import { colors, markdownSyntaxStyle, extractPlanBody, renderHeader, renderFooter, HOTKEYS_LIST, HOTKEYS_DETAIL } from "../../clients/tui/components/index.js";
+import { colors, markdownSyntaxStyle, extractPlanBody, renderHeader, renderFooter, HOTKEYS_LIST, HOTKEYS_DETAIL, HOTKEYS_CONFIRM } from "../../clients/tui/components/index.js";
 import { renderTaskList } from "./task-list-view.js";
-import { stat, readdir, access } from "node:fs/promises";
+import { stat, readdir, access, unlink } from "node:fs/promises";
 import { join } from "node:path";
 
 function shouldLog(): boolean {
@@ -286,6 +286,67 @@ export function renderTaskDetail(
   return scroll;
 }
 
+export function renderDeleteConfirm(
+  renderer: CliRenderer,
+  plan: Plan,
+): BoxRenderable {
+  debug(`[tui:delete-confirm] creating overlay for plan=${plan.fileName}`);
+
+  const overlay = new BoxRenderable(renderer, {
+    id: "delete-confirm-overlay",
+    position: "absolute",
+    top: 0,
+    left: 0,
+    width: "100%",
+    height: "100%",
+    zIndex: 100,
+    backgroundColor: colors.bg,
+    flexDirection: "column",
+    justifyContent: "center",
+    alignItems: "center",
+  });
+
+  const dialog = new BoxRenderable(renderer, {
+    id: "delete-confirm-dialog",
+    width: 50,
+    height: 7,
+    border: true,
+    borderStyle: "single",
+    borderColor: colors.notStarted,
+    backgroundColor: colors.bgAlt,
+    flexDirection: "column",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 1,
+  });
+
+  const titleText = new TextRenderable(renderer, {
+    id: "delete-confirm-title",
+    content: t`${bold(fg(colors.notStarted)("\u26A0 Delete plan"))}`,
+    fg: colors.fg,
+  });
+  dialog.add(titleText);
+
+  const kindTag = plan.kind === "fast" ? "[fast]" : "[full]";
+  const bodyText = new TextRenderable(renderer, {
+    id: "delete-confirm-body",
+    content: t`Delete ${kindTag} ${plan.fileName}? This cannot be undone.`,
+    fg: colors.muted,
+  });
+  dialog.add(bodyText);
+
+  const hintText = new TextRenderable(renderer, {
+    id: "delete-confirm-hint",
+    content: t`${fg(colors.muted)("y: confirm \u00B7 Esc/n: cancel")}`,
+    fg: colors.muted,
+  });
+  dialog.add(hintText);
+
+  overlay.add(dialog);
+  debug(`[tui:delete-confirm] overlay created id=delete-confirm-overlay plan=${plan.fileName}`);
+  return overlay;
+}
+
 function appendMarkdownDeferred(
   renderer: CliRenderer,
   scroll: ScrollBoxRenderable,
@@ -384,6 +445,8 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
   let pendingMarkdownTimer: ReturnType<typeof setTimeout> | null = null;
   let listMounted = false;
   let taskListMounted = false;
+  let confirmOverlay: BoxRenderable | null = null;
+  let emptyStateMounted = false;
   let onModeChange: ((mode: "list" | "detail") => void) | null = null;
   // Forward declaration — the real `quitTui` is assigned below
   // after the `destroy` callback has been defined. The placeholder
@@ -436,6 +499,64 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
       currentTaskList = null;
       taskListMounted = false;
     }
+  };
+
+  const showDeleteConfirm = () => {
+    if (confirmOverlay) {
+      debug(`[tui:delete-confirm] showDeleteConfirm: overlay already active, no-op`);
+      return;
+    }
+    const plan = plans[selectedIndex];
+    if (!plan) {
+      debug(`[tui:delete-confirm] showDeleteConfirm: no plan at index=${selectedIndex}, aborting`);
+      return;
+    }
+    debug(`[tui:delete-confirm] showing confirm overlay for plan=${plan.fileName} index=${selectedIndex}`);
+    confirmOverlay = renderDeleteConfirm(renderer, plan);
+    root.add(confirmOverlay);
+    footerBox.hotkeysText.content = HOTKEYS_CONFIRM;
+    debug(`[tui:footer] hotkeys updated to confirm mode`);
+    renderer.requestRender();
+  };
+
+  const hideDeleteConfirm = () => {
+    if (!confirmOverlay) {
+      debug(`[tui:delete-confirm] hideDeleteConfirm: no overlay active, no-op`);
+      return;
+    }
+    debug(`[tui:delete-confirm] hiding confirm overlay`);
+    try { root.remove(confirmOverlay.id); } catch (e) { console.warn(`[tui:delete-confirm] root.remove failed`, e); }
+    try { confirmOverlay.destroyRecursively(); } catch { /* noop */ }
+    confirmOverlay = null;
+    footerBox.hotkeysText.content = viewMode === "list" ? HOTKEYS_LIST : HOTKEYS_DETAIL;
+    debug(`[tui:footer] hotkeys restored to ${viewMode} mode`);
+    renderer.requestRender();
+  };
+
+  const confirmDelete = async () => {
+    const plan = plans[selectedIndex];
+    if (!plan) {
+      debug(`[tui:delete-confirm] confirmDelete: no plan at index=${selectedIndex}, aborting`);
+      hideDeleteConfirm();
+      return;
+    }
+    const fullPath = join(rootDir, plan.path);
+    debug(`[tui:delete-confirm] confirmDelete: unlinking plan=${plan.fileName} path=${fullPath}`);
+    try {
+      await unlink(fullPath);
+      debug(`[tui:delete-confirm] confirmDelete: unlink succeeded for ${plan.fileName}`);
+    } catch (e) {
+      console.warn(`[tui:delete-confirm] confirmDelete: unlink failed for ${fullPath}: ${e}`);
+      hideDeleteConfirm();
+      return;
+    }
+    hideDeleteConfirm();
+    if (viewMode === "detail") {
+      debug(`[tui:delete-confirm] confirmDelete: returning to list mode after delete`);
+      enterListMode();
+    }
+    debug(`[tui:delete-confirm] confirmDelete: triggering immediate dataTick for rescan`);
+    void dataTick();
   };
 
   const enterDetailMode = () => {
@@ -609,6 +730,22 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
   const keypressHandler = (event: KeyEvent) => {
     if (event.repeated) return;
     console.debug(`[tui:keypress] name=${event.name} ctrl=${event.ctrl} meta=${event.meta} mode=${viewMode}`);
+    if (confirmOverlay) {
+      event.preventDefault();
+      debug(`[tui:keypress] overlay active, intercepting key=${event.name}`);
+      if (event.name === "y") {
+        debug(`[tui:keypress] y: confirming delete`);
+        void confirmDelete();
+        return;
+      }
+      if (event.name === "n" || event.name === "escape") {
+        debug(`[tui:keypress] ${event.name}: cancelling delete`);
+        hideDeleteConfirm();
+        return;
+      }
+      debug(`[tui:keypress] overlay active, ignoring key=${event.name}`);
+      return;
+    }
     if (event.name === "tab") {
       event.preventDefault();
       if (plans.length === 0) {
@@ -637,6 +774,16 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
         return;
       }
       enterListMode();
+      return;
+    }
+    if (event.name === "d") {
+      event.preventDefault();
+      if (viewMode !== "list" || plans.length === 0) {
+        debug(`[tui:keypress] d ignored: viewMode=${viewMode} plans=${plans.length}`);
+        return;
+      }
+      debug(`[tui:keypress] d: triggering delete confirm for index=${selectedIndex}`);
+      showDeleteConfirm();
       return;
     }
     if (event.name === "q") {
@@ -724,6 +871,46 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
       selectedIndex = newIndex;
 
       select.options = buildOptions(plans, statuses, Date.now(), planListPixelWidth());
+
+      if (plans.length === 0 && !emptyStateMounted) {
+        debug(`[tui:refresh] data tick: plans empty, showing empty state`);
+        if (viewMode === "detail") enterListMode();
+        if (listMounted) {
+          try { bodyRow.remove(planList.id); } catch (e) { console.warn(`[tui:refresh] bodyRow.remove(planList) failed`, e); }
+          listMounted = false;
+        }
+        removeTaskList();
+        const emptyBox = new BoxRenderable(renderer, {
+          id: "tui-empty",
+          width: "100%",
+          height: "100%",
+          flexDirection: "column",
+          justifyContent: "center",
+          alignItems: "center",
+          backgroundColor: colors.bg,
+        });
+        const emptyText = new TextRenderable(renderer, {
+          id: "tui-empty-text",
+          content: "All plans deleted.",
+          fg: colors.notStarted,
+        });
+        emptyBox.add(emptyText);
+        bodyRow.add(emptyBox);
+        emptyStateMounted = true;
+        renderer.requestRender();
+        return;
+      }
+
+      if (plans.length > 0 && emptyStateMounted) {
+        debug(`[tui:refresh] data tick: plans restored, removing empty state`);
+        try { bodyRow.remove("tui-empty"); } catch (e) { console.warn(`[tui:refresh] bodyRow.remove(tui-empty) failed`, e); }
+        emptyStateMounted = false;
+        if (!listMounted) {
+          bodyRow.add(planList);
+          listMounted = true;
+        }
+      }
+
       if (selectionChanged) {
         select.setSelectedIndex(newIndex);
         if (viewMode === "detail") enterDetailMode();
@@ -813,6 +1000,12 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
       pendingMarkdownTimer = null;
     }
     removeTaskList();
+    if (confirmOverlay) {
+      debug("[tui:shutdown] removing confirm overlay");
+      try { root.remove(confirmOverlay.id); } catch { /* noop */ }
+      try { confirmOverlay.destroyRecursively(); } catch { /* noop */ }
+      confirmOverlay = null;
+    }
     try { renderer.off("resize", resizeHandler); } catch (e) { console.warn(`[tui:shutdown] renderer.off(resize) failed`, e); }
     try { renderer.keyInput.off("keypress", keypressHandler); } catch (e) { console.warn(`[tui:shutdown] keyInput.off failed`, e); }
   };
