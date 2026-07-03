@@ -1,32 +1,40 @@
 # Research
 
-Updated: 2026-06-29 03:20
+Updated: 2026-06-30 11:15
 Status: active
 
 ## Active Summary (input for /aif-plan)
 <!-- aif:active-summary:start -->
-Topic: TUI detail pane подвисает при переключении планов — рендеринг MarkdownRenderable блокирует event loop
-Goal: Сделать переключение планов отзывчивым — стрелки не залипают, markdown рендерится асинхронно
+Topic: TUI list/detail view toggle (issue #4) — режим «список во весь экран» + «полноэкранный markdown» по Tab/Esc
+Goal: По умолчанию TUI показывает только plan-list (100% ширины). Tab открывает полноэкранную страницу с markdown-рендером выбранного плана. Tab/Esc возвращают обратно.
 Constraints:
-  - `new MarkdownRenderable(renderer, { content })` парсит markdown (marked) + строит renderable-дерево синхронно в constructor'е
-  - Файлы планов: 1.7KB–27KB; `aif-plans-viewer.md` = 27KB парсится ощутимо
-  - `updateDetail()` вызывается синхронно из `onSelect` → блокирует event loop → TUI не реагирует на следующие нажатия пока markdown не отрендерится
-  - opentui `MarkdownRenderable` привязан к `RenderContext` (renderer) — нельзя создать без renderer
+  - Текущий layout в `packages/lazyaif/src/views/plans-viewer/tui-view.ts`: split-view `plan-list 40% | renderTaskDetail 60%` всегда виден
+  - `renderTaskDetail` рендерит `ScrollBoxRenderable` шириной 60% (захардкожено); внутри title/meta/status/separator + deferred `MarkdownRenderable`
+  - `MarkdownRenderable` + `appendMarkdownDeferred` переиспользуем без изменений — `extractPlanBody` + `conceal: false` + `internalBlockMode: "top-level"` уже работают
+  - `renderer.keyInput` — `EventEmitter<KeyHandlerEventMap>` с событием `'keypress'`, можно глобально перехватить `key.name === "tab"` и `key.name === "escape"`
+  - `renderFooter` (в `clients/tui/components/footer.ts`) — статический; нужно сделать динамическим (mode: "list" | "detail")
+  - В footer уже есть `q: quit`, но handler глобального keypress для `q` в коде отсутствует — это отдельный баг, нужно проверить и при необходимости добавить
+  - `bodyRow` (BoxRenderable) — `flexDirection: "row"`, в нём planList + detail; в новом дизайне в каждый момент времени только один ребёнок
 Decisions:
-  - Подход A (deferred parse): рендерить title/meta/status мгновенно, markdown через `setTimeout(0)` — освобождает event loop
-  - Подход E (debounce): 100ms debounce на `onSelect` — при удержании стрелки рендерить только последний index
-  - Комбо A+E — минимальный объём изменений, максимальный эффект
-  - B (pre-warm cache) отвергнут: привязка к RenderContext, CPU spike на старте, сложность lifecycle
-  - C (update in-place) отвергнут: `set content()` всё равно reparse, выигрыш минимален при полной смене контента
-  - D (truncate) отвергнут: теряет контент, плохой UX
+  - Layout: убрать split-view. Два режима, два дочерних элемента `bodyRow` (взаимоисключающие)
+  - Mode A (list): `planList` на всю ширину; `select.focus()`
+  - Mode B (detail): `renderTaskDetail` на всю ширину; `detail.focus()` для scroll
+  - Toggle: `viewMode: "list" | "detail"`, инициализируется `"list"`. Глобальный keypress handler: Tab → toggle; Esc → только из Mode B → Mode A
+  - `renderTaskDetail` принимает `width` параметром (default `100%`); старая логика `60%` не нужна
+  - Footer: параметр `mode`, мутируем `hotkeysText.content` при смене mode (тот же паттерн что `labelTick` мутирует `select.options`)
+  - `dataTick` / `labelTick` / `updateDetail` работают как раньше, но в Mode A `updateDetail` не вызывается (нечего обновлять)
 Open questions:
-  - `queueMicrotask` vs `setTimeout(0)`: microtask выполнится в том же event loop iteration (после I/O), `setTimeout(0)` — в следующем. Для TUI responsiveness `setTimeout(0)` безопаснее
-  - Показывать placeholder "Loading markdown…" или просто title/meta/status без markdown пока парсится? Второе чище — не моргает
+  - Mouse в Mode B: клик по detail чтобы вернуться к списку? Я бы предложил НЕТ — только Esc/Tab (минимальный scope)
+  - При первом открытии Mode B: показывать последний выбранный план сразу, без debounce
+  - Пустое состояние (`plans.length === 0`): Tab игнорируется — нечего открывать
 Success signals:
-  - При быстром переборе стрелок (удерж ↓) TUI не залипает — подсветка в Select двигается плавно
-  - После остановки на плане markdown появляется через ~1 кадр
-  - При одиночном нажатии стрелки markdown виден почти мгновенно (title/meta/status — мгновенно)
-Next step: `/aif-plan fast` — deferred markdown parse + debounce onSelect
+  - На старте TUI — только список во всю ширину, без правой панели
+  - Tab → плавный переход на полноэкранный markdown выбранного плана
+  - Tab/Esc → возврат к списку, фокус на Select
+  - В Mode B стрелки/PageUp/PageDown скроллят markdown
+  - Footer в каждом режиме показывает релевантные hotkeys
+  - Все 42 существующих теста проходят; typecheck clean
+Next step: /aif-plan fast — Tab/Esc toggle, динамический footer, renderTaskDetail width=100%
 <!-- aif:active-summary:end -->
 
 ## Mouse support в TUI планов
@@ -258,3 +266,31 @@ Links (paths):
   - packages/lazyaif/src/views/plans-viewer/tui-view.ts:112-179 — `renderTaskDetail` (MarkdownRenderable creation)
   - packages/lazyaif/src/views/plans-viewer/tui-view.ts:230-247 — `updateDetail` (synchronous, bottleneck)
   - packages/lazyaif/node_modules/@opentui/core/renderables/Markdown.d.ts:134-255 — MarkdownRenderable API
+
+### 2026-06-30 11:15 — Issue #4: Tab to open full-page markdown view
+What changed:
+  - Issue dealenx/lazyaif#4 — текущий TUI показывает split-view `40% | 60%` всегда. Пользователь хочет: по умолчанию только список, Tab открывает полноэкранный markdown-рендер выбранного плана
+  - Текущая архитектура: `bodyRow` (row) содержит `planList` (40%) + `renderTaskDetail` (60%) оба сразу; `renderTaskDetail` ширина 60% захардкожена
+  - `MarkdownRenderable` + `appendMarkdownDeferred` (deferred parse) уже работают — переиспользуем как есть, нужен только новый родитель
+  - `renderer.keyInput` — EventEmitter с `'keypress'`, можно глобально перехватить Tab/Esc. Подтверждено из node_modules/@opentui/core/renderer.d.ts:399 (`get keyInput(): KeyHandler`) и lib/KeyHandler.d.ts:42-46 (KeyHandlerEventMap)
+  - `renderFooter` (clients/tui/components/footer.ts) — статический контент, нужно сделать динамическим (mode-aware)
+  - В footer есть «q: quit», но глобального keypress handler для `q` в коде не нашёл — нужно проверить grep'ом (отдельный баг, в scope #4 включаем только если быстро)
+Key notes:
+  - Решение: убрать split-view. Два режима: `viewMode: "list" | "detail"`. В каждый момент времени в `bodyRow` только один ребёнок
+  - Mode A (default): `planList` шириной 100%, `select.focus()`
+  - Mode B (после Tab): `renderTaskDetail` шириной 100%, `detail.focus()` (стрелки скроллят markdown)
+  - Toggle: глобальный `renderer.keyInput.on('keypress', e => { if (e.name === 'tab') toggle() })` + `event.preventDefault()` чтобы не дать Tab нативно переключить focus
+  - Esc только в Mode B → Mode A
+  - `renderTaskDetail` принимает `width: string` параметром; старая логика 60% удаляется
+  - Footer: мутировать `hotkeysText.content` при смене mode (тот же паттерн что `labelTick` мутирует `select.options`)
+  - `updateDetail` вызывается только в Mode B (в dataTick/labelTick добавляем условие)
+  - `plans.length === 0` — Tab игнорируется, нечего открывать
+  - При первом открытии Mode B — сразу показывать выбранный план, без debounce; markdown рендерится через `appendMarkdownDeferred` ~1 frame
+Links (paths):
+  - packages/lazyaif/src/views/plans-viewer/tui-view.ts:112-166 — renderTaskDetail (width="60%" hardcoded)
+  - packages/lazyaif/src/views/plans-viewer/tui-view.ts:168-205 — appendMarkdownDeferred (переиспользуем)
+  - packages/lazyaif/src/views/plans-viewer/tui-view.ts:247-319 — bodyRow + createPlansTuiApp composition
+  - packages/lazyaif/src/clients/tui/components/footer.ts:6-48 — renderFooter (static, нужна параметризация)
+  - node_modules/@opentui/core/renderer.d.ts:399 — `get keyInput(): KeyHandler`
+  - node_modules/@opentui/core/lib/KeyHandler.d.ts:42-50 — KeyHandlerEventMap (keypress: [KeyEvent])
+  - packages/lazyaif/src/views/plans-viewer/tui-view.ts:407-423 — labelTick (паттерн мутации контента)
