@@ -25,6 +25,8 @@ const PHASE_RE = /^###\s+Phase\s+\d+:\s*(.+)$/;
 const TASK_RE = /^-\s+\[([ xX])\]\s+Task\s+(\d+):\s*(.+)$/;
 const TASK_BOLD_RE = /^-\s+\[([ xX])\]\s+\*\*Task\s+(\d+):\s*(.+)\*\*$/;
 const TASK_BOLD_COLON_RE = /^-\s+\[([ xX])\]\s+\*\*Task\s+(\d+)\*\*:\s*(.+)$/;
+const TASK_T_PREFIX_RE = /^-\s+\[([ xX])\]\s+\*\*T(\d+):\s*(.+)\*\*$/;
+const TASK_T_PREFIX_COLON_RE = /^-\s+\[([ xX])\]\s+\*\*T(\d+)\*\*:\s*(.+)$/;
 const TASK_HEADING_RE = /^#{4,6}\s+\[([ xX])\]\s+Task\s+(\d+):\s*(.+)$/;
 const TASK_HEADING_BOLD_RE = /^#{4,6}\s+\[([ xX])\]\s+\*\*Task\s+(\d+):\s*(.+)\*\*$/;
 const TASK_HEADING_BOLD_COLON_RE = /^#{4,6}\s+\[([ xX])\]\s+\*\*Task\s+(\d+)\*\*:\s*(.+)$/;
@@ -159,7 +161,7 @@ export function parsePlanFile(content: string, relativePath: string): Omit<Plan,
       continue;
     }
 
-    const taskMatch = line.match(TASK_BOLD_RE) ?? line.match(TASK_BOLD_COLON_RE) ?? line.match(TASK_RE) ?? line.match(TASK_HEADING_BOLD_RE) ?? line.match(TASK_HEADING_BOLD_COLON_RE) ?? line.match(TASK_HEADING_RE);
+    const taskMatch = line.match(TASK_BOLD_RE) ?? line.match(TASK_BOLD_COLON_RE) ?? line.match(TASK_T_PREFIX_RE) ?? line.match(TASK_T_PREFIX_COLON_RE) ?? line.match(TASK_RE) ?? line.match(TASK_HEADING_BOLD_RE) ?? line.match(TASK_HEADING_BOLD_COLON_RE) ?? line.match(TASK_HEADING_RE);
     if (taskMatch) {
       if (currentTask) {
         allTasks.push(currentTask);

@@ -192,4 +192,22 @@ describe("parsePlanFile", () => {
     expect(plan.tasks.length).toBe(1);
     expect(plan.tasks[0].title).toBe("Do thing");
   });
+
+  it("parses T-prefix tasks: **T1: title** (abbreviated Task)", async () => {
+    const content = await fixture("t-prefix-plan.md");
+    const plan = parsePlanFile(content, ".ai-factory/plans/t-prefix-plan.md");
+    expect(plan.title).toBe("Add clientName to monitoring pages");
+    expect(plan.branch).toBe("feature/monitoring-client-name");
+    expect(plan.tasks.length).toBe(6);
+    expect(plan.tasks[0].id).toBe(1);
+    expect(plan.tasks[0].done).toBe(false);
+    expect(plan.tasks[0].title).toBe("Add `clientName` to all MonitoringClient/SessionDetail interfaces");
+    expect(plan.tasks[1].id).toBe(2);
+    expect(plan.tasks[1].done).toBe(false);
+    expect(plan.tasks[1].title).toBe("Update `show.tsx` — show clientName in session header");
+    expect(plan.phases.length).toBe(3);
+    expect(plan.phases[0].name).toBe("TypeScript Types");
+    expect(plan.phases[1].name).toBe("UI Display Changes");
+    expect(plan.phases[2].name).toBe("Verification");
+  });
 });
