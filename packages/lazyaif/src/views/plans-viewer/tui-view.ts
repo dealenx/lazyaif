@@ -640,6 +640,50 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
     renderer.requestRender();
   };
 
+  let detailRefreshCounter = 0;
+
+  const refreshDetail = () => {
+    if (viewMode !== "detail") {
+      debug(`[tui:refresh] refreshDetail: skipped (viewMode=${viewMode})`);
+      return;
+    }
+    if (!currentDetail) {
+      debug(`[tui:refresh] refreshDetail: skipped (currentDetail is null)`);
+      return;
+    }
+    const plan = plans[selectedIndex];
+    if (!plan) {
+      debug(`[tui:refresh] refreshDetail: no plan at index=${selectedIndex}, aborting`);
+      return;
+    }
+    debug(`[tui:refresh] refreshDetail: rebuilding detail for plan=${plan.fileName} index=${selectedIndex}`);
+    const oldId = currentDetail.id;
+    if (pendingMarkdownTimer) {
+      debug(`[tui:refresh] refreshDetail: cancelling pending markdown timer`);
+      clearTimeout(pendingMarkdownTimer);
+      pendingMarkdownTimer = null;
+    }
+    try { bodyRow.remove(currentDetail.id); } catch (e) { console.warn(`[tui:refresh] refreshDetail: bodyRow.remove(oldDetail) failed`, e); }
+    try { currentDetail.renderable.destroy(); } catch { /* noop */ }
+    currentDetail = null;
+    debug(`[tui:refresh] refreshDetail: removed old detail id=${oldId}`);
+    detailRefreshCounter++;
+    const detailId = `plan-detail-${selectedIndex}-r${detailRefreshCounter}`;
+    const detail = renderTaskDetail(renderer, plan, statuses[selectedIndex], detailId, "100%");
+    bodyRow.add(detail);
+    currentDetail = { id: detailId, renderable: detail };
+    debug(`[tui:refresh] refreshDetail: mounted new detail id=${detailId} plan=${plan.fileName}`);
+    pendingMarkdownTimer = appendMarkdownDeferred(
+      renderer,
+      detail,
+      plan,
+      `${detailId}-md`,
+      () => currentDetail?.id !== detailId,
+    );
+    try { detail.focus(); } catch (e) { console.warn(`[tui:refresh] refreshDetail: detail.focus() failed`, e); }
+    renderer.requestRender();
+  };
+
   let pendingSelectTimer: ReturnType<typeof setTimeout> | null = null;
   const DEBOUNCE_MS = 100;
 
@@ -865,7 +909,10 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
       }
       debug(`[tui:refresh] reconciled selection: ${selectedFileName} -> ${newIndex}`);
 
-      const selectionChanged = newIndex !== selectedIndex || newPlans[selectedIndex]?.mtime !== plans[selectedIndex]?.mtime;
+      const oldSelectedPlan = plans.find(p => p.fileName === selectedFileName);
+      const newSelectedPlan = newPlans[newIndex];
+      const selectionChanged = newIndex !== selectedIndex || (oldSelectedPlan != null && newSelectedPlan != null && oldSelectedPlan.mtime !== newSelectedPlan.mtime);
+      debug(`[tui:refresh] selectionChanged=${selectionChanged} oldIndex=${selectedIndex} newIndex=${newIndex} oldMtime=${oldSelectedPlan?.mtime} newMtime=${newSelectedPlan?.mtime}`);
       plans = newPlans;
       statuses = newStatuses;
       selectedIndex = newIndex;
@@ -913,13 +960,15 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
 
       if (selectionChanged) {
         select.setSelectedIndex(newIndex);
-        if (viewMode === "detail") enterDetailMode();
-        else {
-          console.debug(`[tui:refresh] data tick: skipping detail re-mount in list mode`);
+        if (viewMode === "detail") {
+          debug(`[tui:refresh] dataTick: calling refreshDetail (viewMode=detail)`);
+          refreshDetail();
+        } else {
+          debug(`[tui:refresh] dataTick: calling rebuildTaskList (viewMode=list)`);
           if (showTasks) {
             currentTaskListPlanFileName = null;
             rebuildTaskList();
-            console.debug(`[tui:refresh] data tick: task list rebuilt for plan=${plans[selectedIndex]?.fileName}`);
+            debug(`[tui:refresh] dataTick: task list rebuilt for plan=${plans[selectedIndex]?.fileName}`);
           }
         }
       }
