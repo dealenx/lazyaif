@@ -9,6 +9,8 @@ export interface PlanSettings {
   testing: boolean;
   logging: "verbose" | "standard" | "minimal";
   docs: boolean;
+  /** Raw docs mode value (e.g. "warn-only") when the plan uses the new bold format. */
+  docsMode?: string;
 }
 
 /** Задача из плана ai-factory. */
@@ -35,6 +37,8 @@ export interface Plan {
   title: string;
   branch: string;
   created: string;
+  /** Plan status from `- **Status:** planning` (new format only). */
+  status?: string;
   settings: PlanSettings;
   phases: Phase[];
   tasks: Task[];

@@ -70,4 +70,64 @@ describe("parsePlanFile", () => {
     expect(plan.settings.docs).toBe(true);
     expect(plan.branch).toBe("main");
   });
+
+  it("parses new-format plan with bold metadata", async () => {
+    const content = await fixture("new-format-plan.md");
+    const plan = parsePlanFile(content, ".ai-factory/plans/new-format-plan.md");
+    expect(plan.kind).toBe("full");
+    expect(plan.title).toBe("Add `mim.entry` field — sample data rows for mim.lua");
+    expect(plan.branch).toBe("current (no-git-switch, feature/add-mim-entry-field)");
+    expect(plan.created).toBe("2026-07-02");
+    expect(plan.status).toBe("planning");
+    expect(plan.settings.testing).toBe(true);
+    expect(plan.settings.logging).toBe("verbose");
+    expect(plan.settings.docs).toBe(false);
+    expect(plan.settings.docsMode).toBe("warn-only");
+  });
+
+  it("parses bold task names in new-format plan", async () => {
+    const content = await fixture("new-format-plan.md");
+    const plan = parsePlanFile(content, ".ai-factory/plans/new-format-plan.md");
+    expect(plan.tasks.length).toBe(3);
+    expect(plan.tasks[0].id).toBe(1);
+    expect(plan.tasks[0].done).toBe(false);
+    expect(plan.tasks[0].title).toBe("Update openspec spec — add `mim.entry` requirement");
+    expect(plan.tasks[1].id).toBe(3);
+    expect(plan.tasks[1].done).toBe(true);
+    expect(plan.tasks[1].title).toBe("Update `lua-mim-lua` skill — add entry to format spec");
+    expect(plan.tasks[2].id).toBe(4);
+    expect(plan.tasks[2].done).toBe(true);
+    expect(plan.tasks[2].title).toBe("Update `lua-validation` skill — add entry validation rules");
+  });
+
+  it("parses phases in new-format plan", async () => {
+    const content = await fixture("new-format-plan.md");
+    const plan = parsePlanFile(content, ".ai-factory/plans/new-format-plan.md");
+    expect(plan.phases.length).toBe(2);
+    expect(plan.phases[0].name).toBe("Core format specification (docs first)");
+    expect(plan.phases[1].name).toBe("Skills documentation");
+  });
+
+  it("strips trailing dash descriptions from bold settings", () => {
+    const content = [
+      "# Plan: Test plan",
+      "- **Branch:** current — feature branch",
+      "- **Created:** 2026-07-02 — today",
+      "",
+      "## Settings",
+      "",
+      "- **Testing:** yes — with description",
+      "- **Logging:** standard — minimal info",
+      "",
+      "## Tasks",
+      "",
+      "### Phase 1: Setup",
+      "- [x] **Task 1: Do something**",
+    ].join("\n");
+    const plan = parsePlanFile(content, ".ai-factory/plans/test.md");
+    expect(plan.branch).toBe("current");
+    expect(plan.created).toBe("2026-07-02");
+    expect(plan.settings.testing).toBe(true);
+    expect(plan.settings.logging).toBe("standard");
+  });
 });

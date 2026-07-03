@@ -23,10 +23,15 @@ function warn(msg: string): void {
 
 const PHASE_RE = /^###\s+Phase\s+\d+:\s*(.+)$/;
 const TASK_RE = /^-\s+\[([ xX])\]\s+Task\s+(\d+):\s*(.+)$/;
+const TASK_BOLD_RE = /^-\s+\[([ xX])\]\s+\*\*Task\s+(\d+):\s*(.+)\*\*$/;
 const DEPENDS_RE = /\(depends\s+on\s+([\d\s,]+)\)/i;
 const SETTINGS_TESTING_RE = /^-\s*Testing:\s*(yes|no)/i;
 const SETTINGS_LOGGING_RE = /^-\s*Logging:\s*(verbose|standard|minimal)/i;
 const SETTINGS_DOCS_RE = /^-\s*Docs:\s*(yes|no)/i;
+const SETTINGS_TESTING_BOLD_RE = /^-\s*\*\*Testing:\*\*\s*(yes|no)/i;
+const SETTINGS_LOGGING_BOLD_RE = /^-\s*\*\*Logging:\*\*\s*(verbose|standard|minimal)/i;
+const SETTINGS_DOCS_BOLD_RE = /^-\s*\*\*Docs:\*\*\s*(yes|no|warn-only)/i;
+const STATUS_BOLD_RE = /^-\s*\*\*Status:\*\*\s*(.+)$/i;
 
 function parseDependsOn(title: string): number[] {
   const m = title.match(DEPENDS_RE);
@@ -51,6 +56,7 @@ export function parsePlanFile(content: string, relativePath: string): Omit<Plan,
   let title = "";
   let branch = "none";
   let created = "";
+  let status: string | undefined;
   const settings: PlanSettings = { ...DEFAULT_SETTINGS };
   const phases: Phase[] = [];
   const allTasks: Task[] = [];
@@ -69,12 +75,25 @@ export function parsePlanFile(content: string, relativePath: string): Omit<Plan,
       inTaskBody = false;
       continue;
     }
-    if (/^Branch:\s*(.+)$/i.test(line)) {
-      branch = line.replace(/^Branch:\s*/i, "").trim();
+    if (/^#\s+Plan:\s*(.+)$/i.test(line)) {
+      title = line.replace(/^#\s+Plan:\s*/i, "").trim();
+      inSettings = false;
+      inTaskBody = false;
       continue;
     }
-    if (/^Created:\s*(.+)$/i.test(line)) {
-      created = line.replace(/^Created:\s*/i, "").trim();
+    const branchMatch = line.match(/^Branch:\s*(.+)$/i) ?? line.match(/^-\s*\*\*Branch:\*\*\s*(.+)$/i);
+    if (branchMatch) {
+      branch = branchMatch[1].split(/\s+—\s+|\s+--\s+/)[0].trim();
+      continue;
+    }
+    const createdMatch = line.match(/^Created:\s*(.+)$/i) ?? line.match(/^-\s*\*\*Created:\*\*\s*(.+)$/i);
+    if (createdMatch) {
+      created = createdMatch[1].split(/\s+—\s+|\s+--\s+/)[0].trim();
+      continue;
+    }
+    const statusMatch = line.match(STATUS_BOLD_RE);
+    if (statusMatch) {
+      status = statusMatch[1].trim();
       continue;
     }
     if (/^##\s+Settings/i.test(line)) {
@@ -84,16 +103,22 @@ export function parsePlanFile(content: string, relativePath: string): Omit<Plan,
     }
     if (inSettings) {
       let m: RegExpMatchArray | null;
-      if ((m = line.match(SETTINGS_TESTING_RE))) {
+      if ((m = line.match(SETTINGS_TESTING_BOLD_RE) ?? line.match(SETTINGS_TESTING_RE))) {
         settings.testing = m[1].toLowerCase() === "yes";
         continue;
       }
-      if ((m = line.match(SETTINGS_LOGGING_RE))) {
+      if ((m = line.match(SETTINGS_LOGGING_BOLD_RE) ?? line.match(SETTINGS_LOGGING_RE))) {
         settings.logging = m[1].toLowerCase() as PlanSettings["logging"];
         continue;
       }
-      if ((m = line.match(SETTINGS_DOCS_RE))) {
-        settings.docs = m[1].toLowerCase() === "yes";
+      if ((m = line.match(SETTINGS_DOCS_BOLD_RE) ?? line.match(SETTINGS_DOCS_RE))) {
+        const raw = m[1].toLowerCase();
+        if (raw === "warn-only") {
+          settings.docs = false;
+          settings.docsMode = "warn-only";
+        } else {
+          settings.docs = raw === "yes";
+        }
         continue;
       }
       if (/^##\s/.test(line) || /^###\s/.test(line)) inSettings = false;
@@ -112,7 +137,7 @@ export function parsePlanFile(content: string, relativePath: string): Omit<Plan,
       continue;
     }
 
-    const taskMatch = line.match(TASK_RE);
+    const taskMatch = line.match(TASK_BOLD_RE) ?? line.match(TASK_RE);
     if (taskMatch) {
       if (currentTask) {
         allTasks.push(currentTask);
@@ -150,7 +175,7 @@ export function parsePlanFile(content: string, relativePath: string): Omit<Plan,
   }
   for (const t of allTasks) t.description = t.description.trimEnd();
 
-  debug(`[parser] found phases=${phases.length} tasks=${allTasks.length}`);
+  debug(`[parser] found phases=${phases.length} tasks=${allTasks.length} status=${status ?? "none"}`);
 
-  return { kind, path: relativePath, fileName, title, branch, created, settings, phases, tasks: allTasks, rawMarkdown: content };
+  return { kind, path: relativePath, fileName, title, branch, created, status, settings, phases, tasks: allTasks, rawMarkdown: content };
 }

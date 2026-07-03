@@ -182,7 +182,7 @@ export function renderTaskDetail(
   });
   scroll.add(titleText);
 
-  const meta = `Branch: ${plan.branch}  ·  Created: ${plan.created}  ·  Testing: ${plan.settings.testing ? "yes" : "no"}  ·  Logging: ${plan.settings.logging}  ·  Docs: ${plan.settings.docs ? "yes" : "no"}`;
+  const meta = `Branch: ${plan.branch}  ·  Created: ${plan.created}  ·  Testing: ${plan.settings.testing ? "yes" : "no"}  ·  Logging: ${plan.settings.logging}  ·  Docs: ${plan.settings.docs ? "yes" : (plan.settings.docsMode ?? "no")}${plan.status ? `  ·  Status: ${plan.status}` : ""}`;
   const metaText = new TextRenderable(renderer, {
     id: `${id}-meta`,
     content: meta,
