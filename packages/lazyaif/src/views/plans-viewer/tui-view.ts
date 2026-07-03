@@ -182,6 +182,21 @@ export function renderTaskDetail(
   });
   scroll.add(titleText);
 
+  const fileNameText = new TextRenderable(renderer, {
+    id: `${id}-filename`,
+    content: t`${fg(colors.accent)(`\u{1F4C4} ${plan.fileName}`)}`,
+    fg: colors.fg,
+  });
+  scroll.add(fileNameText);
+
+  const filePathText = new TextRenderable(renderer, {
+    id: `${id}-filepath`,
+    content: plan.path,
+    fg: colors.muted,
+  });
+  scroll.add(filePathText);
+  debug(`[tui:detail] added fileName=${plan.fileName} path=${plan.path} for ${plan.fileName}`);
+
   const meta = `Branch: ${plan.branch}  ·  Created: ${plan.created}${plan.mode ? `  ·  Mode: ${plan.mode}` : ""}  ·  Testing: ${plan.settings.testing ? "yes" : "no"}  ·  Logging: ${plan.settings.logging}  ·  Docs: ${plan.settings.docs ? "yes" : (plan.settings.docsMode ?? "no")}${plan.status ? `  ·  Status: ${plan.status}` : ""}`;
   const metaText = new TextRenderable(renderer, {
     id: `${id}-meta`,
@@ -210,6 +225,62 @@ export function renderTaskDetail(
     fg: colors.border,
   });
   scroll.add(sepText);
+
+  const BOX_DONE = "\u2611";
+  const BOX_TODO = "\u2610";
+
+  if (plan.phases.length > 0) {
+    debug(`[tui:detail] rendering task summary by phases: ${plan.phases.length} phases, ${plan.tasks.length} tasks for ${plan.fileName}`);
+    for (let pi = 0; pi < plan.phases.length; pi++) {
+      const phase = plan.phases[pi];
+      const phaseDone = phase.tasks.filter((t) => t.done).length;
+      const phaseTotal = phase.tasks.length;
+      const phaseHeaderText = new TextRenderable(renderer, {
+        id: `${id}-phase-${pi}`,
+        content: t`${bold(fg(colors.muted)(`${phase.name} (${phaseDone}/${phaseTotal})`))}`,
+        fg: colors.fg,
+      });
+      scroll.add(phaseHeaderText);
+      for (const task of phase.tasks) {
+        const box = task.done ? BOX_DONE : BOX_TODO;
+        const taskColor = task.done ? colors.done : colors.fg;
+        const line = `  ${box} ${task.id}: ${task.title}`;
+        const taskText = new TextRenderable(renderer, {
+          id: `${id}-task-${task.id}`,
+          content: t`${fg(taskColor)(line)}`,
+          fg: colors.fg,
+        });
+        scroll.add(taskText);
+      }
+    }
+  } else {
+    debug(`[tui:detail] rendering flat task summary: ${plan.tasks.length} tasks for ${plan.fileName}`);
+    const tasksHeaderText = new TextRenderable(renderer, {
+      id: `${id}-tasks-header`,
+      content: t`${bold(fg(colors.muted)(`Tasks (${status.done}/${status.total}):`))}`,
+      fg: colors.fg,
+    });
+    scroll.add(tasksHeaderText);
+    for (const task of plan.tasks) {
+      const box = task.done ? BOX_DONE : BOX_TODO;
+      const taskColor = task.done ? colors.done : colors.fg;
+      const line = `  ${box} ${task.id}: ${task.title}`;
+      const taskText = new TextRenderable(renderer, {
+        id: `${id}-task-${task.id}`,
+        content: t`${fg(taskColor)(line)}`,
+        fg: colors.fg,
+      });
+      scroll.add(taskText);
+    }
+  }
+
+  const sep2Text = new TextRenderable(renderer, {
+    id: `${id}-sep2`,
+    content: "\u2500".repeat(40),
+    fg: colors.border,
+  });
+  scroll.add(sep2Text);
+  debug(`[tui:detail] added second separator after task summary for ${plan.fileName}`);
 
   debug(`[tui:detail] sync phase done for ${plan.fileName}, scheduling markdown parse`);
   return scroll;
