@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, beforeEach } from "bun:test";
-import { createCliRenderer } from "@opentui/core";
 import type { CliRenderer, KeyEvent } from "@opentui/core";
+import { createCliRenderer } from "@opentui/core";
 import { createPlansTuiApp } from "../../../src/views/plans-viewer/tui-view.js";
 import { mkdtemp, mkdir, cp, rm, access } from "node:fs/promises";
 import { join } from "node:path";
@@ -151,6 +151,73 @@ describe("createPlansTuiApp delete flow", () => {
 
     emitKey(r, "d", "d");
     emitKey(r, "escape", "\x1b");
+
+    expect(await pathExists(targetFile)).toBe(true);
+    expect(r.root.findDescendantById("delete-confirm-overlay")).toBeUndefined();
+
+    app.destroy();
+  });
+
+  it("restores arrow key navigation after dialog is dismissed", async () => {
+    const r = await getRenderer();
+    const root = tmpRoot!;
+    const app = await createPlansTuiApp(r, root);
+
+    const planList = r.root.findDescendantById("plan-list") as unknown as { getSelectedIndex: () => number };
+    expect(planList).toBeDefined();
+
+    const initialIndex = planList.getSelectedIndex();
+    emitKey(r, "d", "d");
+    expect(r.root.findDescendantById("delete-confirm-overlay")).toBeDefined();
+
+    emitKey(r, "escape", "\x1b");
+    expect(r.root.findDescendantById("delete-confirm-overlay")).toBeUndefined();
+
+    emitKey(r, "down", "\x1b[B");
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const newIndex = planList.getSelectedIndex();
+    expect(newIndex).not.toBe(initialIndex);
+
+    app.destroy();
+  });
+
+  it("deletes plan when clicking Delete button via onMouseDown", async () => {
+    const r = await getRenderer();
+    const root = tmpRoot!;
+    const app = await createPlansTuiApp(r, root);
+
+    const plansDir = join(root, ".ai-factory", "plans");
+    const targetFile = join(plansDir, "feature-test.md");
+    expect(await pathExists(targetFile)).toBe(true);
+
+    emitKey(r, "d", "d");
+
+    const confirmSelect = r.root.findDescendantById("delete-confirm-select") as unknown as { screenY: number; processMouseEvent: (event: unknown) => void };
+    expect(confirmSelect).toBeDefined();
+
+    confirmSelect.processMouseEvent({ type: "down", button: 0, y: confirmSelect.screenY, x: 0, preventDefault: () => {}, stopPropagation: () => {} } as unknown as never);
+
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
+    expect(await pathExists(targetFile)).toBe(false);
+
+    app.destroy();
+  });
+
+  it("cancels delete when clicking Cancel button via onMouseDown", async () => {
+    const r = await getRenderer();
+    const root = tmpRoot!;
+    const app = await createPlansTuiApp(r, root);
+
+    const plansDir = join(root, ".ai-factory", "plans");
+    const targetFile = join(plansDir, "feature-test.md");
+
+    emitKey(r, "d", "d");
+
+    const confirmSelect = r.root.findDescendantById("delete-confirm-select") as unknown as { screenY: number; processMouseEvent: (event: unknown) => void };
+    expect(confirmSelect).toBeDefined();
+
+    confirmSelect.processMouseEvent({ type: "down", button: 0, y: confirmSelect.screenY + 1, x: 0, preventDefault: () => {}, stopPropagation: () => {} } as unknown as never);
 
     expect(await pathExists(targetFile)).toBe(true);
     expect(r.root.findDescendantById("delete-confirm-overlay")).toBeUndefined();

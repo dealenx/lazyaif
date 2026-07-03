@@ -594,6 +594,26 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
         hideDeleteConfirm();
       }
     });
+    confirmSelect.onMouseDown = (event: MouseEvent) => {
+      if (event.button !== 0) return;
+      const localY = event.y - confirmSelect!.screenY;
+      if (localY < 0) return;
+      const linesPerItem = 1;
+      const visibleIndex = Math.floor(localY / linesPerItem);
+      if (visibleIndex < 0 || visibleIndex >= 2) return;
+      debug(`[tui:delete-confirm] mouse click visibleIndex=${visibleIndex} localY=${localY} screenY=${confirmSelect!.screenY}`);
+      event.preventDefault();
+      event.stopPropagation();
+      confirmSelectIndex = visibleIndex;
+      confirmSelect!.setSelectedIndex(visibleIndex);
+      if (visibleIndex === 0) {
+        debug(`[tui:delete-confirm] mouse click → delete`);
+        void confirmDelete();
+      } else {
+        debug(`[tui:delete-confirm] mouse click → cancel`);
+        hideDeleteConfirm();
+      }
+    };
     footerBox.hotkeysText.content = HOTKEYS_CONFIRM;
     debug(`[tui:footer] hotkeys updated to confirm mode`);
     renderer.requestRender();
@@ -609,6 +629,8 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
     try { confirmOverlay.destroyRecursively(); } catch { /* noop */ }
     confirmOverlay = null;
     confirmSelect = null;
+    try { select.focus(); } catch (e) { console.warn(`[tui:delete-confirm] restore focus failed`, e); }
+    debug(`[tui:delete-confirm] focus restored to planList`);
     footerBox.hotkeysText.content = viewMode === "list" ? HOTKEYS_LIST : HOTKEYS_DETAIL;
     debug(`[tui:footer] hotkeys restored to ${viewMode} mode`);
     renderer.requestRender();
@@ -974,6 +996,10 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
   };
 
   const dataTick = async () => {
+    if (confirmOverlay) {
+      debug(`[tui:refresh] data tick skipped (confirm overlay active)`);
+      return;
+    }
     try {
       const aiFactoryDir = join(rootDir, ".ai-factory");
       const plansDir = join(aiFactoryDir, "plans");
@@ -1108,6 +1134,10 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
   };
 
   const labelTick = () => {
+    if (confirmOverlay) {
+      debug(`[tui:refresh] label tick skipped (confirm overlay active)`);
+      return;
+    }
     try {
       const now = Date.now();
       const oldOptions = select.options;
