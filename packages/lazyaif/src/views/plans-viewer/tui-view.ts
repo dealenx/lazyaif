@@ -333,9 +333,10 @@ export function renderBackBar(
     event.preventDefault();
     event.stopPropagation();
 
-    const cheatX = cheatBtn.screenX;
-    const cheatW = cheatBtn.width;
-    if (event.x >= cheatX && event.x < cheatX + cheatW) {
+    const cheatBtnX = (cheatBtn as unknown as { screenX?: number }).screenX ?? 0;
+    const cheatBtnW = (cheatBtn as unknown as { width?: number }).width ?? 14;
+    const eventX = (event as unknown as { x?: number }).x ?? 0;
+    if (eventX >= cheatBtnX && eventX < cheatBtnX + cheatBtnW) {
       debug(`[tui:back-bar] cheat sheet button clicked`);
       onCheatSheet();
       return;
