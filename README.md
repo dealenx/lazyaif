@@ -34,6 +34,12 @@ curl -fsSL https://raw.githubusercontent.com/dealenx/lazyaif/0.x/scripts/install
 
 Installs to `~/.local/bin/lazyaif` (override with `LAZYAIF_INSTALL_DIR=/path`).
 
+Pre-release channel (latest dev build):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/dealenx/lazyaif/0.x/scripts/install.sh | LAZYAIF_PRE_RELEASE=1 sh
+```
+
 ### Windows (PowerShell)
 
 ```powershell
@@ -41,6 +47,12 @@ irm https://raw.githubusercontent.com/dealenx/lazyaif/0.x/scripts/install.ps1 | 
 ```
 
 Installs to `%LOCALAPPDATA%\lazyaif\lazyaif.exe` (override with `$env:LAZYAIF_INSTALL_DIR = "C:\path"`).
+
+Pre-release channel (latest dev build):
+
+```powershell
+irm https://raw.githubusercontent.com/dealenx/lazyaif/0.x/scripts/install.ps1 | iex -PreRelease
+```
 
 ### npm
 

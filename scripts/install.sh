@@ -1,9 +1,10 @@
 #!/usr/bin/env sh
 # lazyaif installer (unix: macOS + Linux)
 # Usage: curl -fsSL https://raw.githubusercontent.com/dealenx/lazyaif/main/scripts/install.sh | sh
-#   LAZYAIF_INSTALL_DIR=/path  custom install dir (default: ~/.local/bin)
-#   LAZYAIF_INSTALL_DEBUG=1     enable verbose (set -x) output
-#   GITHUB_API_TOKEN=xxx       optional token to avoid rate limits
+#   LAZYAIF_INSTALL_DIR=/path      custom install dir (default: ~/.local/bin)
+#   LAZYAIF_INSTALL_DEBUG=1        enable verbose (set -x) output
+#   LAZYAIF_PRE_RELEASE=1          install latest pre-release (default: stable)
+#   GITHUB_API_TOKEN=xxx           optional token to avoid rate limits
 # Exit codes: 0 ok · 2 unsupported · 3 checksum · 4 download · 5 api
 
 set -eu
@@ -11,6 +12,7 @@ set -eu
 REPO="dealenx/lazyaif"
 INSTALL_DIR="${LAZYAIF_INSTALL_DIR:-$HOME/.local/bin}"
 DEBUG="${LAZYAIF_INSTALL_DEBUG:-}"
+PRE_RELEASE="${LAZYAIF_PRE_RELEASE:-}"
 
 if [ -n "$DEBUG" ]; then
   set -x
@@ -20,7 +22,11 @@ log() { echo "[install] $*"; }
 err() { echo "[install:error] $*" >&2; }
 
 # --- 1. Banner --------------------------------------------------------------
-log "lazyaif installer (unix)"
+if [ -n "$PRE_RELEASE" ]; then
+  log "lazyaif installer (unix) — pre-release channel"
+else
+  log "lazyaif installer (unix) — stable channel"
+fi
 
 # --- 2. Detect OS + arch ----------------------------------------------------
 os_raw="$(uname -s)"
@@ -45,20 +51,32 @@ mkdir -p "$INSTALL_DIR"
 log "install dir: $INSTALL_DIR"
 
 # --- 4. Fetch latest release metadata --------------------------------------
-api_url="https://api.github.com/repos/$REPO/releases/latest"
+# Stable: /releases/latest (GitHub picks the most recent non-prerelease tag)
+# Pre-release: /releases (list all, then pick the first one — newest first)
+if [ -n "$PRE_RELEASE" ]; then
+  api_url="https://api.github.com/repos/$REPO/releases"
+  log "fetching pre-release list: $api_url"
+else
+  api_url="https://api.github.com/repos/$REPO/releases/latest"
+  log "fetching latest stable release: $api_url"
+fi
 api_headers=""
 if [ -n "${GITHUB_API_TOKEN:-}" ]; then
   api_headers="-H \"Authorization: Bearer $GITHUB_API_TOKEN\""
 fi
 
-log "fetching latest release: $api_url"
 api_resp="$(curl -fsSL $api_headers -H "User-Agent: lazyaif-installer" "$api_url")" || {
   err "failed to fetch release metadata from $api_url"
   exit 5
 }
 
-# Extract tag_name (first occurrence)
-tag_name="$(echo "$api_resp" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)"
+# For pre-release: pick the first (newest) release from the list
+# /releases returns newest-first array; first tag_name occurrence = newest release
+if [ -n "$PRE_RELEASE" ]; then
+  tag_name="$(echo "$api_resp" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)"
+else
+  tag_name="$(echo "$api_resp" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)"
+fi
 if [ -z "$tag_name" ]; then
   err "could not parse tag_name from API response"
   exit 5

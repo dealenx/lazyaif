@@ -1,14 +1,16 @@
 #requires -Version 5.1
 # lazyaif installer (windows)
 # Usage: irm https://raw.githubusercontent.com/dealenx/lazyaif/main/scripts/install.ps1 | iex
-#   $env:LAZYAIF_INSTALL_DIR = "C:\path"   custom install dir (default: $env:LOCALAPPDATA\lazyaif)
-#   $env:LAZYAIF_INSTALL_DEBUG = "1"       enable verbose output
-#   $env:GITHUB_API_TOKEN = "xxx"          optional token to avoid rate limits
+#   $env:LAZYAIF_INSTALL_DIR = "C:\path"      custom install dir (default: $env:LOCALAPPDATA\lazyaif)
+#   $env:LAZYAIF_INSTALL_DEBUG = "1"          enable verbose output
+#   $env:LAZYAIF_PRE_RELEASE = "1"             install latest pre-release (default: stable)
+#   $env:GITHUB_API_TOKEN = "xxx"             optional token to avoid rate limits
 # Exit codes: 0 ok · 2 unsupported arch · 3 checksum · 4 download · 5 api
 
 [CmdletBinding()]
 param(
-  [switch]$Verbose
+  [switch]$Verbose,
+  [switch]$PreRelease
 )
 
 $ErrorActionPreference = "Stop"
@@ -26,7 +28,12 @@ function Write-InstallError { param([string]$Msg) Write-Error "[install:error] $
 try {
 
   # --- 1. Banner ------------------------------------------------------------
-  Write-Install "lazyaif installer (windows)"
+  $usePreRelease = $PreRelease -or $env:LAZYAIF_PRE_RELEASE -eq "1"
+  if ($usePreRelease) {
+    Write-Install "lazyaif installer (windows) — pre-release channel"
+  } else {
+    Write-Install "lazyaif installer (windows) — stable channel"
+  }
 
   # --- 2. Detect arch --------------------------------------------------------
   $archRaw = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
@@ -46,19 +53,30 @@ try {
   Write-Install "install dir: $InstallDir"
 
   # --- 4. Fetch latest release metadata --------------------------------------
-  $apiUrl = "https://api.github.com/repos/dealenx/lazyaif/releases/latest"
   $headers = @{ "User-Agent" = "lazyaif-installer" }
   if ($env:GITHUB_API_TOKEN) {
     $headers["Authorization"] = "Bearer $env:GITHUB_API_TOKEN"
   }
-  Write-Install "fetching latest release: $apiUrl"
+  if ($usePreRelease) {
+    $apiUrl = "https://api.github.com/repos/dealenx/lazyaif/releases"
+    Write-Install "fetching pre-release list: $apiUrl"
+  } else {
+    $apiUrl = "https://api.github.com/repos/dealenx/lazyaif/releases/latest"
+    Write-Install "fetching latest stable release: $apiUrl"
+  }
   try {
-    $release = Invoke-RestMethod -Uri $apiUrl -Headers $headers -ErrorAction Stop
+    $apiResp = Invoke-RestMethod -Uri $apiUrl -Headers $headers -ErrorAction Stop
   } catch {
     Write-InstallError "failed to fetch release metadata: $_"
     $script:ExitCode = 5; exit 5
   }
 
+  if ($usePreRelease) {
+    # /releases returns newest-first array; pick the first (newest)
+    $release = $apiResp[0]
+  } else {
+    $release = $apiResp
+  }
   $tagName = $release.tag_name
   if (-not $tagName) {
     Write-InstallError "could not parse tag_name from API response"
