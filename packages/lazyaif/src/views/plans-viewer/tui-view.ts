@@ -511,8 +511,8 @@ export function renderCheatSheet(
 
   const dialog = new BoxRenderable(renderer, {
     id: "cheat-sheet-dialog",
-    width: 70,
-    height: 11,
+    width: 80,
+    height: 18,
     border: true,
     borderStyle: "single",
     borderColor: colors.accent,
@@ -530,7 +530,7 @@ export function renderCheatSheet(
 
   const subtitleText = new TextRenderable(renderer, {
     id: "cheat-sheet-subtitle",
-    content: "Click a command to copy · Esc to close",
+    content: "Arrows: navigate · Enter: copy · Esc: close",
     fg: colors.muted,
   });
   dialog.add(subtitleText);
@@ -544,7 +544,7 @@ export function renderCheatSheet(
 
   const select = new SelectRenderable(renderer, {
     id: "cheat-sheet-select",
-    width: 66,
+    width: 76,
     height: commands.length,
     options: commands.map((cmd, i) => ({
       name: cmd,
@@ -574,6 +574,20 @@ export function renderCheatSheet(
     fg: colors.done,
   });
   dialog.add(statusText);
+
+  const hintSpacer = new TextRenderable(renderer, {
+    id: "cheat-sheet-hint-spacer",
+    content: " ",
+    fg: colors.muted,
+  });
+  dialog.add(hintSpacer);
+
+  const hintText = new TextRenderable(renderer, {
+    id: "cheat-sheet-hint",
+    content: "Enter copies the selected command to clipboard",
+    fg: colors.muted,
+  });
+  dialog.add(hintText);
 
   overlay.add(dialog);
   debug(`[tui:cheat-sheet] overlay created id=cheat-sheet-overlay plan=${plan.fileName}`);
@@ -827,12 +841,13 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
         console.warn(`[tui:cheat-sheet] clipboard copy failed for "${cmd}"`);
         if (cheatStatusText) cheatStatusText.content = `\u2716 Copy failed: ${cmd}`;
       }
+      renderer.requestRender();
       if (cheatFeedbackTimer) clearTimeout(cheatFeedbackTimer);
       cheatFeedbackTimer = setTimeout(() => {
-        if (cheatStatusText) cheatStatusText.content = " ";
         cheatFeedbackTimer = null;
-      }, 3000);
-      renderer.requestRender();
+        debug(`[tui:cheat-sheet] auto-closing after copy feedback (mouse)`);
+        hideCheatSheet();
+      }, 1500);
     };
 
     cheatSelect.on(SelectRenderableEvents.ITEM_SELECTED, (index: number) => {
@@ -1153,12 +1168,13 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
             } else {
               if (cheatStatusText) cheatStatusText.content = `\u2716 Copy failed: ${cmd}`;
             }
+            renderer.requestRender();
             if (cheatFeedbackTimer) clearTimeout(cheatFeedbackTimer);
             cheatFeedbackTimer = setTimeout(() => {
-              if (cheatStatusText) cheatStatusText.content = " ";
               cheatFeedbackTimer = null;
-            }, 3000);
-            renderer.requestRender();
+              debug(`[tui:cheat-sheet] auto-closing after copy feedback`);
+              hideCheatSheet();
+            }, 1500);
           }
         }
         return;
