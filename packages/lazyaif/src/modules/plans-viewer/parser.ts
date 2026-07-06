@@ -30,7 +30,8 @@ const TASK_T_PREFIX_COLON_RE = /^-\s+\[([ xX])\]\s+\*\*T(\d+)\*\*:\s*(.+)$/;
 const TASK_HEADING_RE = /^#{4,6}\s+\[([ xX])\]\s+Task\s+(\d+):\s*(.+)$/;
 const TASK_HEADING_BOLD_RE = /^#{4,6}\s+\[([ xX])\]\s+\*\*Task\s+(\d+):\s*(.+)\*\*$/;
 const TASK_HEADING_BOLD_COLON_RE = /^#{4,6}\s+\[([ xX])\]\s+\*\*Task\s+(\d+)\*\*:\s*(.+)$/;
-const TASK_HEADING_NOBOX_RE = /^#{4,6}\s+Task\s+(\d+):\s*(.+)$/;
+const TASK_HEADING_NOBOX_RE = /^#{3,6}\s+Task\s+(\d+):\s*(.+)$/;
+const BODY_CHECKBOX_RE = /^-\s+\[([ xX])\]/;
 const DEPENDS_RE = /\(depends\s+on\s+([\d\s,]+)\)/i;
 const SETTINGS_TESTING_RE = /^-\s*Testing:\s*(yes|no)/i;
 const SETTINGS_LOGGING_RE = /^-\s*Logging:\s*(verbose|standard|minimal)/i;
@@ -198,6 +199,7 @@ export function parsePlanFile(content: string, relativePath: string): Omit<Plan,
         phase: currentPhase?.name ?? "",
         description: "",
         dependsOn,
+        doneCheckboxPending: true,
       };
       inTaskBody = true;
       continue;
@@ -205,6 +207,14 @@ export function parsePlanFile(content: string, relativePath: string): Omit<Plan,
 
     if (inTaskBody && currentTask && !isHeading(line)) {
       if (line.trim() === "" && currentTask.description === "") continue;
+      if ((currentTask as unknown as { doneCheckboxPending?: boolean }).doneCheckboxPending) {
+        const cb = line.trim().match(BODY_CHECKBOX_RE);
+        if (cb) {
+          currentTask.done = cb[1].toLowerCase() === "x";
+          (currentTask as unknown as { doneCheckboxPending?: boolean }).doneCheckboxPending = false;
+          continue;
+        }
+      }
       currentTask.description += (currentTask.description ? "\n" : "") + line;
       continue;
     }

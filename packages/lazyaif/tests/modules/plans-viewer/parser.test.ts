@@ -210,4 +210,24 @@ describe("parsePlanFile", () => {
     expect(plan.phases[1].name).toBe("UI Display Changes");
     expect(plan.phases[2].name).toBe("Verification");
   });
+
+  it("parses fast-heading format: ### Task N: heading with - [x] inline checkbox", async () => {
+    const content = await fixture("fast-heading-plan.md");
+    const plan = parsePlanFile(content, ".ai-factory/PLAN.md");
+    expect(plan.kind).toBe("fast");
+    expect(plan.created).toBe("2026-07-06");
+    expect(plan.mode).toBe("fast");
+    expect(plan.branch).toBe("(current — no branch switching)");
+    expect(plan.settings.testing).toBe(false);
+    expect(plan.settings.logging).toBe("minimal");
+    expect(plan.settings.docs).toBe(false);
+    expect(plan.tasks.length).toBe(2);
+    expect(plan.tasks[0].id).toBe(1);
+    expect(plan.tasks[0].done).toBe(true);
+    expect(plan.tasks[0].title).toBe("Replace video source in MimPlatformSection.astro");
+    expect(plan.tasks[0].description).toContain("src=\"/videos/0705.mp4\"");
+    expect(plan.tasks[1].id).toBe(2);
+    expect(plan.tasks[1].done).toBe(false);
+    expect(plan.tasks[1].title).toBe("Another video change");
+  });
 });

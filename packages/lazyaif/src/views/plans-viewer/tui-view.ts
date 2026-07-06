@@ -28,6 +28,7 @@ import { colors, markdownSyntaxStyle, extractPlanBody, renderHeader, renderFoote
 import { renderTaskList } from "./task-list-view.js";
 import { stat, readdir, access, unlink } from "node:fs/promises";
 import { join } from "node:path";
+import { copyToClipboard } from "../../shared/clipboard.js";
 
 function shouldLog(): boolean {
   return process.env.DEBUG != null || process.env.LOG_LEVEL === "debug";
@@ -281,6 +282,41 @@ export function renderTaskDetail(
   });
   scroll.add(sep2Text);
   debug(`[tui:detail] added second separator after task summary for ${plan.fileName}`);
+
+  const cheatHeader = new TextRenderable(renderer, {
+    id: `${id}-cheat-header`,
+    content: t`${bold(fg(colors.muted)("Commands (c to copy):"))}`,
+    fg: colors.fg,
+  });
+  scroll.add(cheatHeader);
+
+  const planPath = plan.path;
+  const cmdSlash = `/aif-implement ${planPath}`;
+  const cmdBare = `aif-implement ${planPath}`;
+  const cmdVerifySlash = `/aif-verify ${planPath}`;
+  const cmdImproveSlash = `/aif-improve ${planPath}`;
+
+  const cheatLines = [
+    `  ${cmdSlash}`,
+    `  ${cmdBare}`,
+    `  ${cmdVerifySlash}  / ${cmdImproveSlash}`,
+  ];
+  for (let ci = 0; ci < cheatLines.length; ci++) {
+    const cheatText = new TextRenderable(renderer, {
+      id: `${id}-cheat-${ci}`,
+      content: cheatLines[ci],
+      fg: colors.accent,
+    });
+    scroll.add(cheatText);
+  }
+
+  const sepCheat = new TextRenderable(renderer, {
+    id: `${id}-sep-cheat`,
+    content: "\u2500".repeat(40),
+    fg: colors.border,
+  });
+  scroll.add(sepCheat);
+  debug(`[tui:detail] added cheat-sheet section for ${plan.fileName}`);
 
   debug(`[tui:detail] sync phase done for ${plan.fileName}, scheduling markdown parse`);
   return scroll;
@@ -979,6 +1015,24 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
       }
       debug(`[tui:keypress] d: triggering delete confirm for index=${selectedIndex}`);
       showDeleteConfirm();
+      return;
+    }
+    if (event.name === "c") {
+      event.preventDefault();
+      if (viewMode !== "detail" || plans.length === 0) {
+        debug(`[tui:keypress] c ignored: viewMode=${viewMode} plans=${plans.length}`);
+        return;
+      }
+      const plan = plans[selectedIndex];
+      if (!plan) {
+        debug(`[tui:keypress] c: no plan at index=${selectedIndex}`);
+        return;
+      }
+      const cmd = `/aif-implement ${plan.path}`;
+      debug(`[tui:keypress] c: copying command for plan=${plan.fileName}`);
+      const ok = copyToClipboard(cmd);
+      if (ok) console.debug(`[tui:keypress] c: copied "${cmd}" to clipboard`);
+      else console.warn(`[tui:keypress] c: clipboard copy failed for "${cmd}"`);
       return;
     }
     if (event.name === "q") {
