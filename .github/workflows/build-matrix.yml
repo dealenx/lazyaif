@@ -61,14 +61,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: ci:build - typecheck
-        run: |
-          bun run typecheck 2>&1 | tee /tmp/tsc-out.txt
-          tsc_exit=${PIPESTATUS[0]}
-          if [ "$tsc_exit" -ne 0 ]; then
-            echo "=== TSC ERRORS ==="
-            cat /tmp/tsc-out.txt
-            exit 1
-          fi
+        run: bun run typecheck
 
       - name: ci:build - resolve version
         id: version

@@ -26,20 +26,20 @@ afterEach(async () => {
 describe("renderBackBar", () => {
   it("creates bar with correct id", async () => {
     const r = await getRenderer();
-    const bar = renderBackBar(r, () => {});
+    const bar = renderBackBar(r, () => {}, () => {});
     expect(bar.id).toBe("detail-back-bar");
   });
 
   it("creates text renderable with correct id", async () => {
     const r = await getRenderer();
-    const bar = renderBackBar(r, () => {});
+    const bar = renderBackBar(r, () => {}, () => {});
     const text = bar.findDescendantById("detail-back-bar-text");
     expect(text).toBeDefined();
   });
 
   it("returns a BoxRenderable", async () => {
     const r = await getRenderer();
-    const bar = renderBackBar(r, () => {});
+    const bar = renderBackBar(r, () => {}, () => {});
     expect(bar).toBeDefined();
     expect(bar.id).toBe("detail-back-bar");
   });
