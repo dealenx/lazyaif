@@ -867,6 +867,15 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
       cheatSelect!.setSelectedIndex(visibleIndex);
       copyCommand(visibleIndex);
     };
+    cheatSelect.onMouseScroll = (event: MouseEvent) => {
+      if (!event.scroll) return;
+      const dir = event.scroll.direction;
+      debug(`[tui:cheat-sheet] mouse scroll dir=${dir}`);
+      event.preventDefault();
+      event.stopPropagation();
+      if (dir === "up") cheatSelect?.moveUp();
+      else if (dir === "down") cheatSelect?.moveDown();
+    };
     footerBox.hotkeysText.content = HOTKEYS_CHEAT;
     debug(`[tui:footer] hotkeys updated to cheat mode`);
     renderer.requestRender();
@@ -1147,14 +1156,14 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
     if (event.repeated) return;
     console.debug(`[tui:keypress] name=${event.name} ctrl=${event.ctrl} meta=${event.meta} mode=${viewMode}`);
     if (cheatOverlay) {
-      event.preventDefault();
-      debug(`[tui:keypress] cheat overlay active, intercepting key=${event.name}`);
       if (event.name === "escape") {
+        event.preventDefault();
         debug(`[tui:keypress] escape: closing cheat sheet`);
         hideCheatSheet();
         return;
       }
       if (event.name === "return" || event.name === "enter") {
+        event.preventDefault();
         debug(`[tui:keypress] enter: copying selected command`);
         if (cheatSelect) {
           const opts = cheatSelect.options as Array<{ name: string }>;
@@ -1179,7 +1188,14 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
         }
         return;
       }
-      debug(`[tui:keypress] cheat overlay active, letting key=${event.name} pass to select`);
+      if (event.name === "up" || event.name === "down" || event.name === "pageup" || event.name === "pagedown") {
+        if (event.name === "up") { event.preventDefault(); cheatSelect?.moveUp(); }
+        else if (event.name === "down") { event.preventDefault(); cheatSelect?.moveDown(); }
+        debug(`[tui:keypress] cheat: arrow ${event.name} -> select`);
+        return;
+      }
+      debug(`[tui:keypress] cheat overlay active, ignoring key=${event.name}`);
+      event.preventDefault();
       return;
     }
     if (confirmOverlay) {
