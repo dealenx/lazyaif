@@ -80,6 +80,7 @@ export function parsePlanFile(content: string, relativePath: string): Omit<Plan,
 
   let currentPhase: Phase | null = null;
   let currentTask: Task | null = null;
+  let doneCheckboxPending = false;
   let inSettings = false;
   let inTaskBody = false;
 
@@ -199,19 +200,19 @@ export function parsePlanFile(content: string, relativePath: string): Omit<Plan,
         phase: currentPhase?.name ?? "",
         description: "",
         dependsOn,
-        doneCheckboxPending: true,
       };
+      doneCheckboxPending = true;
       inTaskBody = true;
       continue;
     }
 
     if (inTaskBody && currentTask && !isHeading(line)) {
       if (line.trim() === "" && currentTask.description === "") continue;
-      if ((currentTask as unknown as { doneCheckboxPending?: boolean }).doneCheckboxPending) {
+      if (doneCheckboxPending) {
         const cb = line.trim().match(BODY_CHECKBOX_RE);
         if (cb) {
           currentTask.done = cb[1].toLowerCase() === "x";
-          (currentTask as unknown as { doneCheckboxPending?: boolean }).doneCheckboxPending = false;
+          doneCheckboxPending = false;
           continue;
         }
       }

@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, type StdioOptions } from "node:child_process";
 
 function shouldLog(): boolean {
   return process.env.DEBUG != null || process.env.LOG_LEVEL === "debug";
@@ -9,6 +9,8 @@ function debug(msg: string): void {
 }
 
 type Platform = "wsl" | "macos" | "linux" | "windows" | "unknown";
+
+const PIPE_STDIO: StdioOptions = ["pipe", "ignore", "ignore"];
 
 function detectPlatform(): Platform {
   const platform = process.platform;
@@ -31,7 +33,7 @@ function tryCopy(command: string, args: string[], text: string): boolean {
     execFileSync(command, args, {
       input: text,
       encoding: "utf-8",
-      stdio: ["pipe", "ignore", "ignore"],
+      stdio: PIPE_STDIO,
       timeout: 2000,
     });
     return true;
