@@ -51,7 +51,7 @@ Installs to `%LOCALAPPDATA%\lazyaif\lazyaif.exe` (override with `$env:LAZYAIF_IN
 Pre-release channel (latest dev build):
 
 ```powershell
-irm https://raw.githubusercontent.com/dealenx/lazyaif/0.x/scripts/install.ps1 | iex -PreRelease
+$env:LAZYAIF_PRE_RELEASE = "1"; irm https://raw.githubusercontent.com/dealenx/lazyaif/0.x/scripts/install.ps1 | iex
 ```
 
 ### npm

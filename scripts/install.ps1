@@ -8,15 +8,12 @@
 # Exit codes: 0 ok · 2 unsupported arch · 3 checksum · 4 download · 5 api
 
 [CmdletBinding()]
-param(
-  [switch]$Verbose,
-  [switch]$PreRelease
-)
+param()
 
 $ErrorActionPreference = "Stop"
 $script:ExitCode = 0
 
-if ($Verbose -or $env:LAZYAIF_INSTALL_DEBUG -eq "1") {
+if ($env:LAZYAIF_INSTALL_DEBUG -eq "1") {
   $VerbosePreference = "Continue"
   Set-PSDebug -Trace 1
 }
@@ -28,7 +25,7 @@ function Write-InstallError { param([string]$Msg) Write-Error "[install:error] $
 try {
 
   # --- 1. Banner ------------------------------------------------------------
-  $usePreRelease = $PreRelease -or $env:LAZYAIF_PRE_RELEASE -eq "1"
+  $usePreRelease = $env:LAZYAIF_PRE_RELEASE -eq "1"
   if ($usePreRelease) {
     Write-Install "lazyaif installer (windows) — pre-release channel"
   } else {

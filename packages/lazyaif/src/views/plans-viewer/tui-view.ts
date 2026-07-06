@@ -24,7 +24,7 @@ import {
   sortByMtimeDesc,
 } from "../../modules/plans-viewer/index.js";
 import type { Plan, PlanStatus } from "../../modules/plans-viewer/types.js";
-import { colors, markdownSyntaxStyle, extractPlanBody, renderHeader, renderFooter, HOTKEYS_LIST, HOTKEYS_DETAIL, HOTKEYS_CONFIRM } from "../../clients/tui/components/index.js";
+import { colors, markdownSyntaxStyle, extractPlanBody, renderHeader, renderFooter, HOTKEYS_LIST, HOTKEYS_DETAIL, HOTKEYS_CONFIRM, HOTKEYS_CHEAT } from "../../clients/tui/components/index.js";
 import { renderTaskList } from "./task-list-view.js";
 import { stat, readdir, access, unlink } from "node:fs/promises";
 import { join } from "node:path";
@@ -283,41 +283,6 @@ export function renderTaskDetail(
   scroll.add(sep2Text);
   debug(`[tui:detail] added second separator after task summary for ${plan.fileName}`);
 
-  const cheatHeader = new TextRenderable(renderer, {
-    id: `${id}-cheat-header`,
-    content: t`${bold(fg(colors.muted)("Commands (c to copy):"))}`,
-    fg: colors.fg,
-  });
-  scroll.add(cheatHeader);
-
-  const planPath = plan.path;
-  const cmdSlash = `/aif-implement ${planPath}`;
-  const cmdBare = `aif-implement ${planPath}`;
-  const cmdVerifySlash = `/aif-verify ${planPath}`;
-  const cmdImproveSlash = `/aif-improve ${planPath}`;
-
-  const cheatLines = [
-    `  ${cmdSlash}`,
-    `  ${cmdBare}`,
-    `  ${cmdVerifySlash}  / ${cmdImproveSlash}`,
-  ];
-  for (let ci = 0; ci < cheatLines.length; ci++) {
-    const cheatText = new TextRenderable(renderer, {
-      id: `${id}-cheat-${ci}`,
-      content: cheatLines[ci],
-      fg: colors.accent,
-    });
-    scroll.add(cheatText);
-  }
-
-  const sepCheat = new TextRenderable(renderer, {
-    id: `${id}-sep-cheat`,
-    content: "\u2500".repeat(40),
-    fg: colors.border,
-  });
-  scroll.add(sepCheat);
-  debug(`[tui:detail] added cheat-sheet section for ${plan.fileName}`);
-
   debug(`[tui:detail] sync phase done for ${plan.fileName}, scheduling markdown parse`);
   return scroll;
 }
@@ -325,6 +290,7 @@ export function renderTaskDetail(
 export function renderBackBar(
   renderer: CliRenderer,
   onBack: () => void,
+  onCheatSheet: () => void,
 ): BoxRenderable {
   debug(`[tui:back-bar] creating back bar`);
 
@@ -345,6 +311,20 @@ export function renderBackBar(
   });
   bar.add(text);
 
+  const spacer = new BoxRenderable(renderer, {
+    id: "detail-back-bar-spacer",
+    flexGrow: 1,
+    height: 1,
+  });
+  bar.add(spacer);
+
+  const cheatBtn = new TextRenderable(renderer, {
+    id: "detail-back-bar-cheat",
+    content: t`${fg(colors.accent)("[Cheat Sheet]")}`,
+    fg: colors.fg,
+  });
+  bar.add(cheatBtn);
+
   let lastClickTime = 0;
   const DOUBLE_CLICK_MS = 300;
 
@@ -352,6 +332,15 @@ export function renderBackBar(
     if (event.button !== 0) return;
     event.preventDefault();
     event.stopPropagation();
+
+    const cheatX = cheatBtn.screenX;
+    const cheatW = cheatBtn.width;
+    if (event.x >= cheatX && event.x < cheatX + cheatW) {
+      debug(`[tui:back-bar] cheat sheet button clicked`);
+      onCheatSheet();
+      return;
+    }
+
     const now = Date.now();
     const elapsed = now - lastClickTime;
     debug(`[tui:back-bar] mouse down button=${event.button} elapsed=${elapsed}ms`);
@@ -489,6 +478,109 @@ function appendMarkdownDeferred(
   }, 0);
 }
 
+export function renderCheatSheet(
+  renderer: CliRenderer,
+  plan: Plan,
+): { overlay: BoxRenderable; select: SelectRenderable; statusText: TextRenderable } {
+  debug(`[tui:cheat-sheet] creating overlay for plan=${plan.fileName}`);
+
+  const planPath = plan.path;
+  const commands = [
+    `/aif-implement ${planPath}`,
+    `aif-implement ${planPath}`,
+    `/aif-verify ${planPath}`,
+    `aif-verify ${planPath}`,
+    `/aif-improve ${planPath}`,
+    `aif-improve ${planPath}`,
+  ];
+
+  const overlay = new BoxRenderable(renderer, {
+    id: "cheat-sheet-overlay",
+    position: "absolute",
+    top: 0,
+    left: 0,
+    width: "100%",
+    height: "100%",
+    zIndex: 100,
+    backgroundColor: colors.bg,
+    flexDirection: "column",
+    justifyContent: "center",
+    alignItems: "center",
+  });
+
+  const dialogWidth = Math.min(70, 90);
+  const dialog = new BoxRenderable(renderer, {
+    id: "cheat-sheet-dialog",
+    width: dialogWidth,
+    height: 11,
+    border: true,
+    borderStyle: "single",
+    borderColor: colors.accent,
+    backgroundColor: colors.bgAlt,
+    flexDirection: "column",
+    padding: 1,
+  });
+
+  const titleText = new TextRenderable(renderer, {
+    id: "cheat-sheet-title",
+    content: t`${bold(fg(colors.accent)("\u2139 Cheat Sheet"))}`,
+    fg: colors.fg,
+  });
+  dialog.add(titleText);
+
+  const subtitleText = new TextRenderable(renderer, {
+    id: "cheat-sheet-subtitle",
+    content: "Click a command to copy · Esc to close",
+    fg: colors.muted,
+  });
+  dialog.add(subtitleText);
+
+  const spacerText = new TextRenderable(renderer, {
+    id: "cheat-sheet-spacer",
+    content: " ",
+    fg: colors.muted,
+  });
+  dialog.add(spacerText);
+
+  const select = new SelectRenderable(renderer, {
+    id: "cheat-sheet-select",
+    width: dialogWidth - 4,
+    height: commands.length,
+    options: commands.map((cmd, i) => ({
+      name: cmd,
+      description: i < 2 ? "implement" : i < 4 ? "verify" : "improve",
+      value: i,
+    })),
+    backgroundColor: colors.bgAlt,
+    textColor: colors.fg,
+    selectedBackgroundColor: colors.selected,
+    selectedTextColor: "#FFFFFF",
+    descriptionColor: colors.muted,
+    showDescription: true,
+    wrapSelection: false,
+  });
+  dialog.add(select);
+
+  const statusSpacer = new TextRenderable(renderer, {
+    id: "cheat-sheet-status-spacer",
+    content: " ",
+    fg: colors.muted,
+  });
+  dialog.add(statusSpacer);
+
+  const statusText = new TextRenderable(renderer, {
+    id: "cheat-sheet-status",
+    content: " ",
+    fg: colors.done,
+  });
+  dialog.add(statusText);
+
+  overlay.add(dialog);
+  debug(`[tui:cheat-sheet] overlay created id=cheat-sheet-overlay plan=${plan.fileName}`);
+  select.focus();
+  return { overlay, select, statusText };
+}
+
 export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string): Promise<{ destroy: () => void }> {
   console.debug(`[tui:app] initializing rootDir=${rootDir}`);
 
@@ -551,6 +643,10 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
   let confirmOverlay: BoxRenderable | null = null;
   let confirmSelect: SelectRenderable | null = null;
   let confirmSelectIndex = 1;
+  let cheatOverlay: BoxRenderable | null = null;
+  let cheatSelect: SelectRenderable | null = null;
+  let cheatStatusText: TextRenderable | null = null;
+  let cheatFeedbackTimer: ReturnType<typeof setTimeout> | null = null;
   let emptyStateMounted = false;
   let onModeChange: ((mode: "list" | "detail") => void) | null = null;
   // Forward declaration — the real `quitTui` is assigned below
@@ -698,6 +794,90 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
     void dataTick();
   };
 
+  const showCheatSheet = () => {
+    if (cheatOverlay) {
+      debug(`[tui:cheat-sheet] showCheatSheet: overlay already active, no-op`);
+      return;
+    }
+    if (viewMode !== "detail") {
+      debug(`[tui:cheat-sheet] showCheatSheet: ignored (not in detail mode)`);
+      return;
+    }
+    const plan = plans[selectedIndex];
+    if (!plan) {
+      debug(`[tui:cheat-sheet] showCheatSheet: no plan at index=${selectedIndex}, aborting`);
+      return;
+    }
+    debug(`[tui:cheat-sheet] showing cheat sheet for plan=${plan.fileName} index=${selectedIndex}`);
+    const result = renderCheatSheet(renderer, plan);
+    cheatOverlay = result.overlay;
+    cheatSelect = result.select;
+    cheatStatusText = result.statusText;
+    root.add(cheatOverlay);
+
+    const copyCommand = (index: number) => {
+      const cmd = cheatSelect!.options[index]?.name;
+      if (!cmd) return;
+      debug(`[tui:cheat-sheet] copying command index=${index}: ${cmd}`);
+      const ok = copyToClipboard(cmd);
+      if (ok) {
+        debug(`[tui:cheat-sheet] copied "${cmd}" to clipboard`);
+        if (cheatStatusText) cheatStatusText.content = `\u2714 Copied: ${cmd}`;
+      } else {
+        console.warn(`[tui:cheat-sheet] clipboard copy failed for "${cmd}"`);
+        if (cheatStatusText) cheatStatusText.content = `\u2716 Copy failed: ${cmd}`;
+      }
+      if (cheatFeedbackTimer) clearTimeout(cheatFeedbackTimer);
+      cheatFeedbackTimer = setTimeout(() => {
+        if (cheatStatusText) cheatStatusText.content = " ";
+        cheatFeedbackTimer = null;
+      }, 3000);
+      renderer.requestRender();
+    };
+
+    cheatSelect.on(SelectRenderableEvents.ITEM_SELECTED, (index: number) => {
+      debug(`[tui:cheat-sheet] select item selected index=${index}`);
+      copyCommand(index);
+    });
+    cheatSelect.onMouseDown = (event: MouseEvent) => {
+      if (event.button !== 0) return;
+      const localY = event.y - cheatSelect!.screenY;
+      if (localY < 0) return;
+      const linesPerItem = 1;
+      const visibleIndex = Math.floor(localY / linesPerItem);
+      if (visibleIndex < 0 || visibleIndex >= cheatSelect!.options.length) return;
+      debug(`[tui:cheat-sheet] mouse click visibleIndex=${visibleIndex} localY=${localY}`);
+      event.preventDefault();
+      event.stopPropagation();
+      cheatSelect!.setSelectedIndex(visibleIndex);
+      copyCommand(visibleIndex);
+    };
+    footerBox.hotkeysText.content = HOTKEYS_CHEAT;
+    debug(`[tui:footer] hotkeys updated to cheat mode`);
+    renderer.requestRender();
+  };
+
+  const hideCheatSheet = () => {
+    if (!cheatOverlay) {
+      debug(`[tui:cheat-sheet] hideCheatSheet: no overlay active, no-op`);
+      return;
+    }
+    debug(`[tui:cheat-sheet] hiding cheat sheet overlay`);
+    if (cheatFeedbackTimer) {
+      clearTimeout(cheatFeedbackTimer);
+      cheatFeedbackTimer = null;
+    }
+    try { root.remove(cheatOverlay.id); } catch (e) { console.warn(`[tui:cheat-sheet] root.remove failed`, e); }
+    try { cheatOverlay.destroyRecursively(); } catch { /* noop */ }
+    cheatOverlay = null;
+    cheatSelect = null;
+    cheatStatusText = null;
+    try { select.focus(); } catch { /* noop */ }
+    footerBox.hotkeysText.content = viewMode === "list" ? HOTKEYS_LIST : HOTKEYS_DETAIL;
+    debug(`[tui:footer] hotkeys restored to ${viewMode} mode`);
+    renderer.requestRender();
+  };
+
   const enterDetailMode = () => {
     if (viewMode === "detail") {
       console.debug(`[tui:mode] enterDetailMode: already in detail, no-op`);
@@ -743,6 +923,9 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
     const backBar = renderBackBar(renderer, () => {
       debug(`[tui:back-bar] onBack callback -> enterListMode`);
       enterListMode();
+    }, () => {
+      debug(`[tui:back-bar] onCheatSheet callback -> showCheatSheet`);
+      showCheatSheet();
     });
     detailContainer.add(backBar);
     debug(`[tui:mode] added backBar to detailContainer id=${containerId}`);
@@ -837,6 +1020,9 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
     const backBar = renderBackBar(renderer, () => {
       debug(`[tui:back-bar] onBack callback (refresh) -> enterListMode`);
       enterListMode();
+    }, () => {
+      debug(`[tui:back-bar] onCheatSheet callback (refresh) -> showCheatSheet`);
+      showCheatSheet();
     });
     detailContainer.add(backBar);
     detailContainer.add(detail);
@@ -945,6 +1131,40 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
   const keypressHandler = (event: KeyEvent) => {
     if (event.repeated) return;
     console.debug(`[tui:keypress] name=${event.name} ctrl=${event.ctrl} meta=${event.meta} mode=${viewMode}`);
+    if (cheatOverlay) {
+      event.preventDefault();
+      debug(`[tui:keypress] cheat overlay active, intercepting key=${event.name}`);
+      if (event.name === "escape") {
+        debug(`[tui:keypress] escape: closing cheat sheet`);
+        hideCheatSheet();
+        return;
+      }
+      if (event.name === "return" || event.name === "enter") {
+        debug(`[tui:keypress] enter: copying selected command`);
+        if (cheatSelect) {
+          const idx = (cheatSelect as unknown as { selectedIndex: number }).selectedIndex;
+          const cmd = cheatSelect.options[idx]?.name;
+          if (cmd) {
+            const ok = copyToClipboard(cmd);
+            if (ok) {
+              debug(`[tui:cheat-sheet] copied "${cmd}" to clipboard`);
+              if (cheatStatusText) cheatStatusText.content = `\u2714 Copied: ${cmd}`;
+            } else {
+              if (cheatStatusText) cheatStatusText.content = `\u2716 Copy failed: ${cmd}`;
+            }
+            if (cheatFeedbackTimer) clearTimeout(cheatFeedbackTimer);
+            cheatFeedbackTimer = setTimeout(() => {
+              if (cheatStatusText) cheatStatusText.content = " ";
+              cheatFeedbackTimer = null;
+            }, 3000);
+            renderer.requestRender();
+          }
+        }
+        return;
+      }
+      debug(`[tui:keypress] cheat overlay active, letting key=${event.name} pass to select`);
+      return;
+    }
     if (confirmOverlay) {
       event.preventDefault();
       debug(`[tui:keypress] overlay active, intercepting key=${event.name}`);
@@ -1023,16 +1243,8 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
         debug(`[tui:keypress] c ignored: viewMode=${viewMode} plans=${plans.length}`);
         return;
       }
-      const plan = plans[selectedIndex];
-      if (!plan) {
-        debug(`[tui:keypress] c: no plan at index=${selectedIndex}`);
-        return;
-      }
-      const cmd = `/aif-implement ${plan.path}`;
-      debug(`[tui:keypress] c: copying command for plan=${plan.fileName}`);
-      const ok = copyToClipboard(cmd);
-      if (ok) console.debug(`[tui:keypress] c: copied "${cmd}" to clipboard`);
-      else console.warn(`[tui:keypress] c: clipboard copy failed for "${cmd}"`);
+      debug(`[tui:keypress] c: opening cheat sheet for index=${selectedIndex}`);
+      showCheatSheet();
       return;
     }
     if (event.name === "q") {
@@ -1268,6 +1480,18 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
       try { confirmOverlay.destroyRecursively(); } catch { /* noop */ }
       confirmOverlay = null;
       confirmSelect = null;
+    }
+    if (cheatOverlay) {
+      debug("[tui:shutdown] removing cheat sheet overlay");
+      try { root.remove(cheatOverlay.id); } catch { /* noop */ }
+      try { cheatOverlay.destroyRecursively(); } catch { /* noop */ }
+      cheatOverlay = null;
+      cheatSelect = null;
+      cheatStatusText = null;
+    }
+    if (cheatFeedbackTimer) {
+      clearTimeout(cheatFeedbackTimer);
+      cheatFeedbackTimer = null;
     }
     try { renderer.off("resize", resizeHandler); } catch (e) { console.warn(`[tui:shutdown] renderer.off(resize) failed`, e); }
     try { renderer.keyInput.off("keypress", keypressHandler); } catch (e) { console.warn(`[tui:shutdown] keyInput.off failed`, e); }

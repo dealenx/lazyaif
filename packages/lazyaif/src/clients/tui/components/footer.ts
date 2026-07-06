@@ -4,8 +4,9 @@ import { colors } from "./theme.js";
 import { VERSION } from "../../../shared/version.js";
 
 export const HOTKEYS_LIST = "Arrows/Wheel: navigate · Enter/Tab/Dbl-click: open · Click: select · d: delete · Tasks panel: auto (width≥100) · auto-refresh: 2s · q: quit";
-export const HOTKEYS_DETAIL = "Arrows/PageUp/PageDown: scroll · Tab/Esc/Dbl-click \u2190: back · c: copy command · auto-refresh: 2s · q: quit";
+export const HOTKEYS_DETAIL = "Arrows/PageUp/PageDown: scroll · Tab/Esc/Dbl-click \u2190: back · c: cheat sheet · auto-refresh: 2s · q: quit";
 export const HOTKEYS_CONFIRM = "Arrows: choose · Enter: confirm · Esc: cancel";
+export const HOTKEYS_CHEAT = "Click: copy command · Esc: close";
 
 export function renderFooter(
   renderer: CliRenderer,
