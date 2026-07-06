@@ -75,7 +75,7 @@ jobs:
     name: Publish to npm
     needs: release
     runs-on: ubuntu-latest
-    if: ${{ vars.NPM_TOKEN_AVAILABLE == 'true' }}
+    if: ${{ vars.NPM_TOKEN_AVAILABLE == 'true' && !contains(github.ref_name, '-dev') }}
     steps:
       - name: publish:npm - checkout
         uses: actions/checkout@v4
