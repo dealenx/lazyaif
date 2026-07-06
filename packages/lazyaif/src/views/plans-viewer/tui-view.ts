@@ -659,6 +659,7 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
   let confirmSelectIndex = 1;
   let cheatOverlay: BoxRenderable | null = null;
   let cheatSelect: SelectRenderable | null = null;
+  let cheatSelectIndex = 0;
   let cheatStatusText: TextRenderable | null = null;
   let cheatFeedbackTimer: ReturnType<typeof setTimeout> | null = null;
   let emptyStateMounted = false;
@@ -826,11 +827,13 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
     const result = renderCheatSheet(renderer, plan);
     cheatOverlay = result.overlay;
     cheatSelect = result.select;
+    cheatSelectIndex = 0;
     cheatStatusText = result.statusText;
     root.add(cheatOverlay);
 
     const copyCommand = (index: number) => {
-      const cmd = (cheatSelect!.options as Array<{ name: string }>)[index]?.name;
+      const opts = cheatSelect!.options as Array<{ name: string }>;
+      const cmd = opts[index]?.name;
       if (!cmd) return;
       debug(`[tui:cheat-sheet] copying command index=${index}: ${cmd}`);
       const ok = copyToClipboard(cmd);
@@ -845,13 +848,18 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
       if (cheatFeedbackTimer) clearTimeout(cheatFeedbackTimer);
       cheatFeedbackTimer = setTimeout(() => {
         cheatFeedbackTimer = null;
-        debug(`[tui:cheat-sheet] auto-closing after copy feedback (mouse)`);
+        debug(`[tui:cheat-sheet] auto-closing after copy feedback`);
         hideCheatSheet();
       }, 1500);
     };
 
+    cheatSelect.on(SelectRenderableEvents.SELECTION_CHANGED, (index: number) => {
+      cheatSelectIndex = index;
+      debug(`[tui:cheat-sheet] selection changed index=${index}`);
+    });
+
     cheatSelect.on(SelectRenderableEvents.ITEM_SELECTED, (index: number) => {
-      debug(`[tui:cheat-sheet] select item selected index=${index}`);
+      debug(`[tui:cheat-sheet] item selected (enter/click) index=${index}`);
       copyCommand(index);
     });
     cheatSelect.onMouseDown = (event: MouseEvent) => {
@@ -1164,11 +1172,10 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
       }
       if (event.name === "return" || event.name === "enter") {
         event.preventDefault();
-        debug(`[tui:keypress] enter: copying selected command`);
+        debug(`[tui:keypress] enter: copying selected command index=${cheatSelectIndex}`);
         if (cheatSelect) {
           const opts = cheatSelect.options as Array<{ name: string }>;
-          const idx = (cheatSelect as unknown as { selectedIndex: number }).selectedIndex;
-          const cmd = opts[idx]?.name;
+          const cmd = opts[cheatSelectIndex]?.name;
           if (cmd) {
             const ok = copyToClipboard(cmd);
             if (ok) {
