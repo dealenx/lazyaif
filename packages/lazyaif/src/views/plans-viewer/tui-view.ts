@@ -509,10 +509,9 @@ export function renderCheatSheet(
     alignItems: "center",
   });
 
-  const dialogWidth = Math.min(70, 90);
   const dialog = new BoxRenderable(renderer, {
     id: "cheat-sheet-dialog",
-    width: dialogWidth,
+    width: 70,
     height: 11,
     border: true,
     borderStyle: "single",
@@ -545,7 +544,7 @@ export function renderCheatSheet(
 
   const select = new SelectRenderable(renderer, {
     id: "cheat-sheet-select",
-    width: dialogWidth - 4,
+    width: 66,
     height: commands.length,
     options: commands.map((cmd, i) => ({
       name: cmd,
@@ -817,7 +816,7 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
     root.add(cheatOverlay);
 
     const copyCommand = (index: number) => {
-      const cmd = cheatSelect!.options[index]?.name;
+      const cmd = (cheatSelect!.options as Array<{ name: string }>)[index]?.name;
       if (!cmd) return;
       debug(`[tui:cheat-sheet] copying command index=${index}: ${cmd}`);
       const ok = copyToClipboard(cmd);
@@ -846,7 +845,7 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
       if (localY < 0) return;
       const linesPerItem = 1;
       const visibleIndex = Math.floor(localY / linesPerItem);
-      if (visibleIndex < 0 || visibleIndex >= cheatSelect!.options.length) return;
+      if (visibleIndex < 0 || visibleIndex >= (cheatSelect!.options as Array<{ name: string }>).length) return;
       debug(`[tui:cheat-sheet] mouse click visibleIndex=${visibleIndex} localY=${localY}`);
       event.preventDefault();
       event.stopPropagation();
@@ -1143,8 +1142,9 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
       if (event.name === "return" || event.name === "enter") {
         debug(`[tui:keypress] enter: copying selected command`);
         if (cheatSelect) {
+          const opts = cheatSelect.options as Array<{ name: string }>;
           const idx = (cheatSelect as unknown as { selectedIndex: number }).selectedIndex;
-          const cmd = cheatSelect.options[idx]?.name;
+          const cmd = opts[idx]?.name;
           if (cmd) {
             const ok = copyToClipboard(cmd);
             if (ok) {
