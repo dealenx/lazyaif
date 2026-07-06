@@ -72,11 +72,8 @@ api_resp="$(curl -fsSL $api_headers -H "User-Agent: lazyaif-installer" "$api_url
 
 # For pre-release: pick the first (newest) release from the list
 # /releases returns newest-first array; first tag_name occurrence = newest release
-if [ -n "$PRE_RELEASE" ]; then
-  tag_name="$(echo "$api_resp" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)"
-else
-  tag_name="$(echo "$api_resp" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)"
-fi
+# Split on commas so sed's greedy .* can only match within one field at a time
+tag_name="$(echo "$api_resp" | tr ',' '\n' | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)"
 if [ -z "$tag_name" ]; then
   err "could not parse tag_name from API response"
   exit 5
