@@ -852,7 +852,7 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
         console.warn(`[tui:cheat-sheet] clipboard copy failed for "${cmd}"`);
         if (cheatStatusText) cheatStatusText.content = `\u2716 Copy failed: ${cmd}`;
       }
-      try { renderer.render(); } catch { /* noop */ }
+      renderer.requestRender();
       if (cheatFeedbackTimer) clearTimeout(cheatFeedbackTimer);
       cheatFeedbackTimer = setTimeout(() => {
         cheatFeedbackTimer = null;
@@ -1192,7 +1192,7 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
             } else {
               if (cheatStatusText) cheatStatusText.content = `\u2716 Copy failed: ${cmd}`;
             }
-            try { renderer.render(); } catch { /* noop */ }
+            renderer.requestRender();
             if (cheatFeedbackTimer) clearTimeout(cheatFeedbackTimer);
             cheatFeedbackTimer = setTimeout(() => {
               cheatFeedbackTimer = null;
