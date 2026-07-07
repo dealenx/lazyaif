@@ -545,7 +545,7 @@ export function renderCheatSheet(
   const selectWrapper = new BoxRenderable(renderer, {
     id: "cheat-sheet-select-wrapper",
     width: 76,
-    flexGrow: 1,
+    height: commands.length * 2 + 2,
     flexDirection: "column",
   });
 
@@ -585,14 +585,14 @@ export function renderCheatSheet(
 
   const hintSpacer = new TextRenderable(renderer, {
     id: "cheat-sheet-hint-spacer",
-    content: " ",
-    fg: colors.muted,
+    content: "\u2500".repeat(40),
+    fg: colors.border,
   });
   dialog.add(hintSpacer);
 
   const hintText = new TextRenderable(renderer, {
     id: "cheat-sheet-hint",
-    content: "Enter copies the selected command to clipboard",
+    content: "Arrows: navigate · Enter: copy · Esc: close",
     fg: colors.muted,
   });
   dialog.add(hintText);
