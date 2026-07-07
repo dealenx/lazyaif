@@ -855,10 +855,13 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
       renderer.requestRender();
       if (cheatFeedbackTimer) clearTimeout(cheatFeedbackTimer);
       cheatFeedbackTimer = setTimeout(() => {
-        cheatFeedbackTimer = null;
-        debug(`[tui:cheat-sheet] auto-closing after copy feedback`);
-        hideCheatSheet();
-      }, 800);
+        renderer.requestRender();
+        cheatFeedbackTimer = setTimeout(() => {
+          cheatFeedbackTimer = null;
+          debug(`[tui:cheat-sheet] auto-closing after copy feedback`);
+          hideCheatSheet();
+        }, 350);
+      }, 50);
     };
 
     cheatSelect.on(SelectRenderableEvents.SELECTION_CHANGED, (index: number) => {
@@ -1195,10 +1198,13 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
             renderer.requestRender();
             if (cheatFeedbackTimer) clearTimeout(cheatFeedbackTimer);
             cheatFeedbackTimer = setTimeout(() => {
-              cheatFeedbackTimer = null;
-              debug(`[tui:cheat-sheet] auto-closing after copy feedback`);
-              hideCheatSheet();
-            }, 800);
+              renderer.requestRender();
+              cheatFeedbackTimer = setTimeout(() => {
+                cheatFeedbackTimer = null;
+                debug(`[tui:cheat-sheet] auto-closing after copy feedback`);
+                hideCheatSheet();
+              }, 350);
+            }, 50);
           }
         }
         return;
