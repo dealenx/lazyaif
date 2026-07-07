@@ -512,7 +512,7 @@ export function renderCheatSheet(
   const dialog = new BoxRenderable(renderer, {
     id: "cheat-sheet-dialog",
     width: 80,
-    height: 54,
+    height: "70%",
     border: true,
     borderStyle: "single",
     borderColor: colors.accent,
@@ -542,10 +542,17 @@ export function renderCheatSheet(
   });
   dialog.add(spacerText);
 
+  const selectWrapper = new BoxRenderable(renderer, {
+    id: "cheat-sheet-select-wrapper",
+    width: 76,
+    flexGrow: 1,
+    flexDirection: "column",
+  });
+
   const select = new SelectRenderable(renderer, {
     id: "cheat-sheet-select",
-    width: 76,
-    height: commands.length,
+    width: "100%",
+    height: "100%",
     options: commands.map((cmd, i) => ({
       name: cmd,
       description: i < 2 ? "implement" : i < 4 ? "verify" : "improve",
@@ -559,7 +566,8 @@ export function renderCheatSheet(
     showDescription: true,
     wrapSelection: false,
   });
-  dialog.add(select);
+  selectWrapper.add(select);
+  dialog.add(selectWrapper);
 
   const statusSpacer = new TextRenderable(renderer, {
     id: "cheat-sheet-status-spacer",
