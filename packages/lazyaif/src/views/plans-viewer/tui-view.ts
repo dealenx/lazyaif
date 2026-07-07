@@ -860,7 +860,7 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
           cheatFeedbackTimer = null;
           debug(`[tui:cheat-sheet] auto-closing after copy feedback`);
           hideCheatSheet();
-        }, 350);
+        }, 250);
       }, 50);
     };
 
