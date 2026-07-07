@@ -485,7 +485,7 @@ export function renderCheatSheet(
 ): { overlay: BoxRenderable; select: SelectRenderable; statusText: TextRenderable } {
   debug(`[tui:cheat-sheet] creating overlay for plan=${plan.fileName}`);
 
-  const planPath = plan.path;
+  const planPath = plan.path.startsWith("/") ? `.${plan.path}` : plan.path;
   const commands = [
     `/aif-implement ${planPath}`,
     `aif-implement ${planPath}`,
@@ -512,7 +512,7 @@ export function renderCheatSheet(
   const dialog = new BoxRenderable(renderer, {
     id: "cheat-sheet-dialog",
     width: 80,
-    height: 18,
+    height: 54,
     border: true,
     borderStyle: "single",
     borderColor: colors.accent,
@@ -850,7 +850,7 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
         cheatFeedbackTimer = null;
         debug(`[tui:cheat-sheet] auto-closing after copy feedback`);
         hideCheatSheet();
-      }, 1500);
+      }, 500);
     };
 
     cheatSelect.on(SelectRenderableEvents.SELECTION_CHANGED, (index: number) => {
@@ -866,7 +866,7 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
       if (event.button !== 0) return;
       const localY = event.y - cheatSelect!.screenY;
       if (localY < 0) return;
-      const linesPerItem = 1;
+      const linesPerItem = 2;
       const visibleIndex = Math.floor(localY / linesPerItem);
       if (visibleIndex < 0 || visibleIndex >= (cheatSelect!.options as Array<{ name: string }>).length) return;
       debug(`[tui:cheat-sheet] mouse click visibleIndex=${visibleIndex} localY=${localY}`);
@@ -1190,7 +1190,7 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
               cheatFeedbackTimer = null;
               debug(`[tui:cheat-sheet] auto-closing after copy feedback`);
               hideCheatSheet();
-            }, 1500);
+            }, 500);
           }
         }
         return;
