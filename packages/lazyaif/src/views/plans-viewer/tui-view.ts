@@ -852,13 +852,13 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
         console.warn(`[tui:cheat-sheet] clipboard copy failed for "${cmd}"`);
         if (cheatStatusText) cheatStatusText.content = `\u2716 Copy failed: ${cmd}`;
       }
-      renderer.requestRender();
+      try { renderer.render(); } catch { /* noop */ }
       if (cheatFeedbackTimer) clearTimeout(cheatFeedbackTimer);
       cheatFeedbackTimer = setTimeout(() => {
         cheatFeedbackTimer = null;
         debug(`[tui:cheat-sheet] auto-closing after copy feedback`);
         hideCheatSheet();
-      }, 500);
+      }, 800);
     };
 
     cheatSelect.on(SelectRenderableEvents.SELECTION_CHANGED, (index: number) => {
@@ -1192,13 +1192,13 @@ export async function createPlansTuiApp(renderer: CliRenderer, rootDir: string):
             } else {
               if (cheatStatusText) cheatStatusText.content = `\u2716 Copy failed: ${cmd}`;
             }
-            renderer.requestRender();
+            try { renderer.render(); } catch { /* noop */ }
             if (cheatFeedbackTimer) clearTimeout(cheatFeedbackTimer);
             cheatFeedbackTimer = setTimeout(() => {
               cheatFeedbackTimer = null;
               debug(`[tui:cheat-sheet] auto-closing after copy feedback`);
               hideCheatSheet();
-            }, 500);
+            }, 800);
           }
         }
         return;
